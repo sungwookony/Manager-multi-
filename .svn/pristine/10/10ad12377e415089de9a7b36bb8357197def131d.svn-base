@@ -1,0 +1,433 @@
+//
+//  CommunicatorWithIProxy.m
+//  Manager
+//
+//  Created by SR_LHH_MAC on 2017. 6. 4..
+//  Copyright © 2017년 tomm. All rights reserved.
+//
+
+#import "CommunicatorWithIProxy.h"
+#import "CommunicatorWithDC.h"
+
+#import <netinet/in.h>
+#import <netinet/tcp.h>
+#import "GCDAsyncSocket.h"
+#import "LogWriteToFile.h"
+
+#import "TaskHandler.h"
+#import "Utility.h"
+
+
+@interface CommunicatorWithIProxy () <PipeHandlerDelegate>
+
+/// @brief      불필요함.
+@property (nonatomic, strong) NSTask        * myInstallTaks;
+
+/// @brief      iproxy 커멘드라인툴을 사용하기 위햔 타스크
+@property (nonatomic, strong) NSTask        * myIProxyTask;
+
+/// @brief      iproxy 타스크의 실시간 Output 출력을 처리함.
+@property (nonatomic, strong) PipeHandler   * communicatorWithIproxyHandler;
+
+/// @brief      iproxy 타스크의 실시간 Error 출력을 처리함.
+@property (nonatomic, strong) PipeHandler   * communicatorWithIproxyErrorHandler;
+
+/// @brief      iproxy 롸 통신을 할 소켓
+/// @details    리소스 앱과 직접적으로 연결하는게 아니라 iproxy 가 중계해주는 것임.
+@property (nonatomic, strong)   GCDAsyncSocket      * connectSocket;
+
+/// @breif      ResourceMornitor 에서 올려주는 리소스 정보를 파일로 저장할 때 사용함.
+@property (nonatomic, strong)   LogWriteToFile      * logWriteFile;
+
+/// @breif      연결 상태
+@property (nonatomic, assign)   BOOL                bTCPSockConnected;
+@end
+
+///@brief   iproxy 를 사용하여 리소스 앱과 통신을 함.
+@implementation CommunicatorWithIProxy {
+    dispatch_queue_t    rxQueue;//mg//serial queue
+}
+
+/// @breif      초기화
+@synthesize customDelegate;
+
+- (id) init {
+    self = [super init];
+    if( self ) {
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillTerminate:) name:ApplicationWillTerminateNotification object:nil];
+        _bTCPSockConnected = NO;
+        
+        _myIProxyTask = nil;
+    }
+    
+    rxQueue = dispatch_queue_create("RX_SERIAL_QUEUE", NULL);//mg//
+    _connectSocket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:dispatch_get_main_queue()];
+    
+    return self;
+}
+
+- (void) dealloc {
+    [self closeIProxy];
+    
+#ifdef USE_LOG_RESOURCE
+    _logWriteFile = nil;
+#endif
+}
+
+#pragma mark - <PipeHandlerDelegate>
+/// @breif      iproxy 에서 출력된 문자열
+/// @param readData 출력된 문자열
+/// @param handler  해당 문자열을 발생시킨 핸들러  위 문자열의 구분을 위해 필요함.
+- (void) readData:(NSData *)readData withHandler:(id)handler {
+    
+}
+
+#pragma mark - <NSNotication>
+/// @breif      AppDelegate 에서 발생한 Notification 을 받아서 정리함.
+- (void) applicationWillTerminate:(NSNotification *)notification {
+    [self closeIProxy];
+    
+#ifdef USE_LOG_RESOURCE
+    [_logWriteFile closeFile];
+#endif
+}
+
+- (void) taskTerminated:(NSNotification *)notification {
+    [self stopIProxyTask];
+}
+
+
+#pragma mark - <GCDAsyncSocket>
+/// @brief      소켓이 연결되었을때 호출되는 Delegate -- 서버일때
+- (void)socket:(GCDAsyncSocket *)sock didAcceptNewSocket:(GCDAsyncSocket *)newSocket {
+    
+}
+
+/// @brief      소켓이 연결되었을 때 호출되는 Delegate -- 클라이언트일때
+- (void)socket:(GCDAsyncSocket *)sock didConnectToHost:(NSString *)host port:(uint16_t)port {
+    DDLogInfo(@"%s, deviceNo : %d", __FUNCTION__, (int)_deviceNo);
+    if( sock != _connectSocket ) {
+        DDLogError(@"잘못됐음..");
+        return ;
+    }
+    
+    [self resetSockOptions:_connectSocket];
+    _bTCPSockConnected = YES;
+    [sock readDataWithTimeout:-1 tag:0];
+}
+
+/// @brief      Unix Domain Socket 이 연결되었을때 호출되는 Delegate.
+- (void)socket:(GCDAsyncSocket *)sock didConnectToUrl:(NSURL *)url {
+    
+}
+
+/// @brief      소켓이 끊겼을때 호출되는 Delegate
+- (void)socketDidDisconnect:(GCDAsyncSocket *)sock withError:(NSError *)err {
+    DDLogWarn(@"%s, %d, error : %@", __FUNCTION__, (int)_deviceNo, err);
+    _bTCPSockConnected = NO;
+    if( [customDelegate respondsToSelector:@selector(didDisconnectedFromResourceApp)] ) {
+        [customDelegate didDisconnectedFromResourceApp];
+    }
+}
+
+/// @brief      소켓에서 데이터를 읽었을때 호출되는 Delegate
+- (void)socket:(GCDAsyncSocket *)sock didReadData:(NSData *)data withTag:(long)tag {
+//    DDLogWarn(@"%s, %d, tag : %d", __FUNCTION__, (int)_deviceNo, tag);
+    __weak typeof(self) w_self = self ;
+    
+    //mg//dispatch_async(dispatch_get_main_queue(), ^{
+    dispatch_async(rxQueue, ^{//mg//
+        @autoreleasepool {
+            [w_self processReceivedData:data withTag:tag];
+            
+            // 데이터를 읽은 뒤 항상 다음에 올 데이터를 읽기 위해 준비 시킨다.
+            [sock readDataWithTimeout:-1 tag:0];
+        }
+    });
+}
+
+/// @brief      데이터를 전송한뒤 호출되는 Delegate
+- (void)socket:(GCDAsyncSocket *)sock didWriteDataWithTag:(long)tag {
+    DDLogWarn(@"%s, %d", __FUNCTION__, (int)_deviceNo);
+    
+    // This method is executed on the socketQueue (not the main thread)
+    
+    //    if( tag == 0 ) {
+    //        dispatch_semaphore_signal(self.writeSem);
+    //    }
+}
+
+#pragma mark - <User Functions>
+/// @brief      iproxy 타스크를 실행시킨다.
+- (void) startIProxyTask {
+    
+    
+    [self stopIProxyTask];
+    NSLog(@"%s",__FUNCTION__);
+    int nPortNum = RESOURCE_PORT + _deviceNo;
+    DDLogInfo(@"%s and %d",__FUNCTION__,_deviceNo);
+    NSString * commandString = [NSString stringWithFormat:@"iproxy %d %d %@", nPortNum, nPortNum, _udid];
+    
+    _myIProxyTask = [[NSTask alloc] init];
+    _myIProxyTask.launchPath = @"/bin/bash";
+    _myIProxyTask.arguments = @[@"-l", @"-c", commandString];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskTerminated:) name:NSTaskDidTerminateNotification object:_myIProxyTask];
+    
+    _communicatorWithIproxyHandler = [[PipeHandler alloc] initWithDelegate:self];
+    _communicatorWithIproxyErrorHandler = [[PipeHandler alloc] initWithDelegate:self];
+    [_communicatorWithIproxyHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_OUTPUT];
+    [_communicatorWithIproxyErrorHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_ERROR];
+    
+    @try {
+        [_myIProxyTask launch];
+    } @catch (NSException *e) {
+        DDLogError(@"task error : %@", e.reason);
+        
+        //mg//s
+        [_communicatorWithIproxyHandler closeHandler];
+        _communicatorWithIproxyHandler = nil;
+        
+        [_communicatorWithIproxyErrorHandler closeHandler];
+        _communicatorWithIproxyErrorHandler = nil;
+        
+        _myIProxyTask = nil;
+        //mg//e
+    }
+}//startIProxyTask
+
+/// @brief      iproxy 타스크를 종료시킨다.
+- (void) stopIProxyTask {
+    DDLogInfo(@"%s, %d", __FUNCTION__, _deviceNo)
+    if( _myIProxyTask ) {
+        if( _myIProxyTask.isRunning ) {
+            __block dispatch_semaphore_t terminateSem = dispatch_semaphore_create(0);
+            
+            /// @code   [NSTask terminate] 의 정의를 보면 "// Not always possible. Sends SIGTERM." 주석이 달려있음.. 이 때문에 가끔.. terminationHanler 가 호출되지 않아 dispatch_semaphore_signal 을 할수 없어 wait 상태가 지속되는 상태가 발생됨. 어차피 UDID 로 프로세스 아이디를 찾아 강종시키는 코드가 뒤에 실행되므로.. 최대 5초 대기하였다가 wait 를 풀도록 함. NSTask 를 사용하는 중요코드는 이렇게 처리 하였음.
+            _myIProxyTask.terminationHandler = ^(NSTask * task) {
+                if( terminateSem )
+                    dispatch_semaphore_signal(terminateSem);
+            };
+            [_myIProxyTask terminate];
+            dispatch_semaphore_wait(terminateSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f *NSEC_PER_SEC)));
+            /// @endcode
+            
+            _myIProxyTask.terminationHandler = nil;
+            
+            [_communicatorWithIproxyHandler closeHandler];
+            _communicatorWithIproxyHandler = nil;
+            
+            [_communicatorWithIproxyErrorHandler closeHandler];
+            _communicatorWithIproxyErrorHandler = nil;
+        }
+        _myIProxyTask = nil;
+    }
+    
+    int nPortNum = RESOURCE_PORT + _deviceNo;
+    if( [NSThread isMainThread] ) {
+        [Utility killListenPort:nPortNum exceptPid:getpid()];
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            [Utility killListenPort:nPortNum exceptPid:getpid()];
+        });
+    }
+}
+
+/// @brief      연결상태인지 체크함.
+- (BOOL) checkConnected {
+    if( !_bTCPSockConnected ) {
+        return NO;
+    }
+    
+    return YES;
+}
+
+/// @brief      소켓옵션 설정... 예전에 peartalk 를 통해 리소스 앱을 직접연결했을 때 유용했었는데.. 지금은 유용하지 않은거 같음..
+/// @brief      통신하는 패킷의 사이즈가 정해져 있는데 작은 사이즈다 보니 데이터가 뭉쳐서 송/수신 되는 경우가 있어 소켓 버퍼 사이즈를 조정했었음.
+- (void) resetSockOptions:(GCDAsyncSocket *)sock {
+    DDLogInfo(@"%s, %d", __FUNCTION__, (int)_deviceNo);
+    [sock performBlock:^{
+        int fd = [sock socketFD];
+        
+        int nLen = sizeof(int);
+        int sendBufSize = 20;
+        if( -1 == setsockopt(fd, SOL_SOCKET, SO_SNDBUF, (char *)&sendBufSize, (socklen_t)nLen) ) {
+            DDLogError(@"SetSockOpt Failed!! -- (SO_SNDBUF)");
+        }
+        
+        int recvBufSize = 12;
+        if( -1 == setsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *)&recvBufSize, (socklen_t)nLen) ) {
+            DDLogError(@"SetSockOpt Failed!! -- (SO_RCVBUF)");
+        }
+        
+        int on = 1;
+        if( -1 == setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char*)&on, (socklen_t)nLen) ) {
+            /* handle error */
+            DDLogError(@"SetSockOpt Failed!! -- (TCP_NODELAY)");
+        }
+        
+        int reuse = 1;
+        if( -1 == setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, (socklen_t)nLen) ) {
+            DDLogError(@"SetSockOpt Failed!! -- (SO_REUSEADDR)");
+        }
+        
+    }];
+    
+//    [NSTimer scheduledTimerWithTimeInterval:1.0f target:self selector:@selector(onCheckSocketOptions:) userInfo:sock repeats:NO];
+}
+
+/// @brief      위에 지정한 옵션이 적용됐는지 확인함.
+- (void) onCheckSocketOptions:(NSTimer *)theTimer {
+    GCDAsyncSocket * socket = (GCDAsyncSocket *)[theTimer userInfo];
+    
+    [socket performBlock:^{
+        int fd = [socket socketFD];
+        
+        int nLen = sizeof(int);
+        int sendBufSize = 20;
+        if( -1 == getsockopt(fd, SOL_SOCKET, SO_SNDBUF, (char *)&sendBufSize, (socklen_t *)&nLen) ) {
+            DDLogError(@"SetSockOpt Failed!! -- (SO_SNDBUF)");
+        } else {
+            DDLogInfo(@"Socket Send Buffer Size : %d", sendBufSize);
+        }
+        
+        int recvBufSize = 12;
+        if( -1 == getsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *)&recvBufSize, (socklen_t *)&nLen) ) {
+            DDLogError(@"SetSockOpt Failed!! -- (SO_RCVBUF)");
+        } else {
+            DDLogInfo(@"Seocket Read Buffer Size : %d", recvBufSize);
+        }
+        
+        int on = 1;
+        if( -1 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char* )&on, (socklen_t *)&nLen) ) {
+            /* handle error */
+            DDLogError(@"SetSockOpt Failed!! -- (TCP_NODELAY)");
+        } else {
+            if( on )
+                DDLogInfo(@"SetSockOpt Successed!! -- (TCP_NODELAY)");
+        }
+        
+        int reuse = 1;
+        if( -1 == getsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char* )&reuse, (socklen_t *)&nLen) ) {
+            /* handle error */
+            DDLogInfo(@"SetSockOpt Failed!! -- (SO_REUSEADDR)");
+        } else {
+            if( on )
+                DDLogInfo(@"SetSockOpt Successed!! -- (SO_REUSEADDR)");
+        }
+    }];
+    
+    [theTimer invalidate];
+}
+
+/// @brief      리소스 모니터와 소켓연결을 시도함.
+- (void) connectResourceMornitor {
+    DDLogDebug(@"%s", __FUNCTION__);
+    
+    if( _bTCPSockConnected )
+        return ;
+    
+    if( !_connectSocket )
+        _connectSocket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:dispatch_get_main_queue()];
+    
+//    __block __typeof__(self) blockSelf = self;
+    
+    int nPort = RESOURCE_PORT + _deviceNo;
+    DDLogVerbose(@"port = %d", nPort);
+    
+    NSError * error = nil;
+    if( NO == [_connectSocket connectToHost:@"localhost" onPort:nPort error:&error] ) {
+        DDLogError(@"resource app connect fail : %@", error.description);
+        
+        if( [customDelegate respondsToSelector:@selector(didDisconnectedFromResourceApp)] )
+            [customDelegate didDisconnectedFromResourceApp];
+    } else
+        DDLogInfo(@"resource app connect succeeded");
+    
+#ifdef USE_LOG_RESOURCE
+    blockSelf.logWriteFile = [[LogWriteToFile alloc] init];
+    [blockSelf.logWriteFile createLogFileByDeviceID:_deviceNo];
+#endif
+}
+
+/// @brief      종료함.
+- (void) closeIProxy {
+    // Disconnected 에 대한 이벤트를 받아서 처리해주는 부분이 없기때문에 이렇게 만 해줘도 메모리 정리가 된다.
+    DDLogVerbose(@"%s -- deviceNo : %d", __FUNCTION__, _deviceNo) ;
+    if( _connectSocket ) {
+        if( _bTCPSockConnected ) {
+            [_connectSocket disconnectAfterWriting];
+        }
+        [_connectSocket setDelegate:nil];
+        _connectSocket = nil;
+    }
+    
+    _bTCPSockConnected = NO;
+}
+
+//mg//
+/// @brief      리소스 모니터 앱에 명령을 전송함.
+/*- (BOOL)sendCommand:(NSString *)cmd {
+    NSData *dataCmd = [cmd dataUsingEncoding:NSUTF8StringEncoding];
+    if( !_bTCPSockConnected ) {
+        DDLogDebug(@"Client is not connected!! iProxy");
+//        return NO;
+        
+        [self connectResourceMornitor];
+    }
+    
+    [_connectSocket writeData:dataCmd withTimeout:-1 tag:0];
+    
+    return YES;
+}
+ */
+
+//mg//재연결 조건 추가
+- (BOOL)sendCommand:(NSString *)cmd autoConnect:(BOOL)connect {
+    NSData *dataCmd = [cmd dataUsingEncoding:NSUTF8StringEncoding];
+    
+    if( !_bTCPSockConnected ) {
+        if (connect)
+            [self connectResourceMornitor];
+        else
+            return NO;
+    }
+    
+    [_connectSocket writeData:dataCmd withTimeout:-1 tag:0];
+    return YES;
+}
+
+/// @brief      소켓에서 읽어들은 데이터를 처리함.
+- (void)processReceivedData:(NSData *)data withTag:(long)tag {
+    DDLogDebug(@"%s", __FUNCTION__);
+    DDLogDebug(@"rx %d", data.length);
+    
+    NSString * uploadedPacket = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    DDLogVerbose(@"packet = %@ and data size = %d",uploadedPacket,(int)data.length);
+    NSArray * content = [uploadedPacket componentsSeparatedByString:@":"];
+    
+    if( content.count == 2 ) {
+        // 리소스모니터 앱은 서버로 동작을 하는데.. Manager, iproxy, ResourceMornitor 앱이 모두 연결되면 리소스 앱은 새로운 소켓이 연결됐다는 Delegate 가 호출될것임.
+        // 이때 연결된 클라이언트소켓에 자신의 정보를 전송함. 메니져는 이 패킷을 받아서 연결이 성공했음을 판단함. 이렇게 하지 않으면 연결 됐음을 확인 할 수 없음. (메니져는 iproxy 와 연결 하기 때문임)
+        DDLogWarn(@"Recv Content : %@", content);
+        if( [@"device" isEqualToString:[content objectAtIndex:0]] ) {               // Resource Mornitor 앱과 연결되었을때 ResourceMornitor App 에서 보내주는 데이터
+//            _deviceInfos.deviceNo = [[content objectAtIndex:1] intValue];
+            if( [customDelegate respondsToSelector:@selector(didConnectedToResourceApp)] )
+                [customDelegate didConnectedToResourceApp];
+        }
+        _bTCPSockConnected = YES;
+    } else {
+        CommunicatorWithDC * theComuDC = [CommunicatorWithDC sharedDCInterface];
+        if( theComuDC && [theComuDC respondsToSelector:@selector(recvdResourcePacket:andDeviceNo:)] ) {
+            [theComuDC recvdResourcePacket:data andDeviceNo:_deviceNo];
+        }
+        
+#ifdef USE_LOG_RESOURCE
+        // 디버깅용 로그 파일저장.
+        [_logWriteFile writeString:data.description withTag:_deviceNo];
+#endif
+    }
+}
+
+
+@end

@@ -1,0 +1,91 @@
+//
+//  PrefixHeader.pch
+//  Manager
+//
+//  Created by mac_onycom on 2015. 7. 1..
+//  Copyright (c) 2015년 tomm. All rights reserved.
+//
+
+#ifndef Manager_PrefixHeader_pch
+#define Manager_PrefixHeader_pch
+
+// Include any system framework and library headers here that should be included in all compilation units.
+// You will also need to set the Prefix Header build setting of one or more of your targets to reference this file.
+#ifdef __OBJC__
+#import <Cocoa/Cocoa.h>
+#import "DefineKeycode.h"
+
+#import "DDLog.h"
+#import "DDTTYLogger.h"
+#import "DDASLLogger.h"
+#import "DDFileLogger.h"
+
+#endif
+
+// Manager Log
+#define MYLog(fmt, ...) NSLog((@"===MYLOG(%d)==[Line %d]==|" fmt @"|==="),   _deviceInfos.deviceNo, __LINE__, ##__VA_ARGS__);
+
+#define MANAGER_LOG(fmt, ...) NSLog((@"===MYLOG==[Line %d]==|" fmt @"|==="),   __LINE__, ##__VA_ARGS__);[[NSNotificationCenter defaultCenter] postNotificationName:LOG_SEND object:[NSString stringWithFormat:fmt,##__VA_ARGS__] userInfo:nil];
+#define MANAGER_ERROR_LOG(fmt, ...) NSLog((@"===MYLOG==[Line %d]==|" fmt @"|==="),   __LINE__, ##__VA_ARGS__);[[NSNotificationCenter defaultCenter] postNotificationName:LOG_ERROR_SEND object:[NSString stringWithFormat:fmt,##__VA_ARGS__] userInfo:nil];
+/////
+
+#define FORMAT(format, ...) [NSString stringWithFormat:(format), ##__VA_ARGS__]
+
+static const int ddLogLevel = LOG_LEVEL_VERBOSE;
+
+
+#define MAPPINGFILE @"AppiumDeviceMapping.txt"
+
+static NSString * const ApplicationWillTerminateNotification = @"applicationWillTerminate";
+
+static NSString * const DeviceInfo = @"DeviceInfo";
+
+#define USE_WEBDRIVER   0
+#define USE_APPIUM      1
+#define USE_INSTRUMENTS 0
+
+#define WDAPort                     8100
+
+#define METHOD                      @"Method"
+#define BODY                        @"Body"
+#define CMD                         @"Command"
+#define PORT                        @"Port"
+#define TIME_OUT                    @"TimeOut"
+#define SESSION_ID                  @"SessionID"
+#define ELEMENT_ID                  @"ElementID"
+
+
+#define AGENT_MODE_KEY              @"ControlAgent"
+#define AGENT_MODE_APPIUM           @"Appium"
+#define AGENT_MODE_WEBDRIVER        @"WebDriverAgent"
+#define AGENT_MODE_INSTRUMENTS      @"Instruments"
+
+#define SCAPTURE_MODE_KEY           @"SCapture"
+#define SCAPTURE_MODE_POLLING       @"Polling"
+#define SCAPTURE_MODE_QUICKTIME     @"QuickTime"
+
+#define XCTEST_RUN_KEY              @"XCTRun"
+
+
+#define DEVICE_CONNECT      @"DEVICE_CONNECT"
+#define DEVICE_LOG          @"DEVICE_LOG"
+#define APPIUM_LOG          @"APPIUM_LOG"
+#define LOG_SEND            @"LOG_SEND"
+#define LOG_ERROR_SEND      @"LOG_ERROR_SEND"
+#define LOG_WARN_SEND       @"LOG_WARN_SEND"
+#define LOG_INFO_SEND       @"LOG_INFO_SEND"
+#define LOG_DEBUG_SEND      @"LOG_DEBUG_SEND"
+#define LOG_VERBOSE_SEND    @"LOG_VERBOSE_SEND"
+
+#define LOG_DC_SEND         @"LOG_DC_SEND"
+
+#define APP_INFO            @"APP_INFO"
+
+
+typedef NS_ENUM(NSInteger, REMOTE_CONTROL) {
+    CONTROL_APPIUM = 0,
+    CONTROL_XCUITEST = 1
+};
+
+
+#endif
