@@ -733,35 +733,23 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 }
 
 - (IBAction)ResetAll:(id)sender {
-    /*
-     [self.myConnectionItemList enumerateKeysAndObjectsWithOptions:NSEnumerationConcurrent
-                                   usingBlock:^(id key, id object, BOOL *stop) {
-                                       DDLogInfo(@"%@ = %@", key, object);
-                                       if(object != nil)
-                                           [(ConnectionItemInfo*)object resetAppium];
-                                   }];
-    
-    [self.myConnectionItemList removeAllObjects];
-    [self __getMappingTableFromFileName:MAPPINGFILE];
-     */
-  
+
     DDLogWarn(@"test");
+
+    NSString *path = [[NSBundle mainBundle] executablePath];
     
-//    [self performSelector:@selector(restartManager2) withObject:nil afterDelay:5.0];
+    NSLog(@"path = %@",path);
+    NSString *mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
+    NSLog(@"path = %@",mgr);
+    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
+    exit(0);
+//    NSTask * restartTask = [[NSTask alloc] init];
+//    restartTask.launchPath = path;
+//    [restartTask launch];
+//
+//    [[NSApplication sharedApplication] terminate:nil];
     
-    /*
-    for( NSDictionary * dicItem in _arrConnectionItemList ) {
-        ConnectionItemInfo * itemInfo = [dicItem objectForKey:KEY_OBJECT];
-        [itemInfo resetAppium];
-    }
     
-    [_arrConnectionItemList removeAllObjects];
-#ifdef VER_STANDALONE
-    [self initConnectionItemList];
-#else
-    [self __getMappingTableFromFileName:MAPPINGFILE];
-#endif
-*/
 }
 
 -(void) restartManager2 {
@@ -969,59 +957,59 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 - (void)appendStringValue:(NSString*)string mode:(int)nMode type:(int)nType
 {
     
-    NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-    paragraphStyle.alignment = NSTextAlignmentLeft;
-//    paragraphStyle.lineSpacing = FONT_SIZE/2;
-    NSFont * labelFont = [NSFont fontWithName:FONT_HELVETICA size:FONT_SIZE];
-    if(nType == TYPE_MANAGER){
-        labelFont = [NSFont fontWithName:FONT_HELVETICA size:13];
-    }
-//    NSColor * labelColor = [NSColor colorWithWhite:1 alpha:1];
-    NSColor* labelColor;
-    if(nMode == 0){
-        labelColor = [NSColor whiteColor];//verbose
-    }else if(nMode == 1){
-        labelColor = [NSColor redColor];//error
-    }else if(nMode == 2){
-        labelColor = [NSColor yellowColor];//warning
-    }else if(nMode == 3){
-        labelColor = [NSColor lightGrayColor];//mg//글씨가 잘 안보여서 수정//blueColor];//info
-    }
-    
-    //mg//debug용 추가
-    else if(nMode == 4){
-        labelColor = [NSColor cyanColor];
-    }
-    
-    NSShadow *shadow = [[NSShadow alloc] init];
-    [shadow setShadowColor : BLACK_SHADOW];
-    [shadow setShadowOffset : CGSizeMake (1.0, 1.0)];
-    [shadow setShadowBlurRadius : 1];
-
-    
-    NSAttributedString* stringToAppend = [[NSAttributedString alloc] initWithString:string attributes:@{
-                                                                                                        NSParagraphStyleAttributeName : paragraphStyle,
-                                                                                                        NSKernAttributeName : @2.0,
-                                                                                                        NSFontAttributeName : labelFont,
-                                                                                                        NSForegroundColorAttributeName : labelColor,
-                                                                                                        NSShadowAttributeName : shadow }];
-    
-   
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if(nType == 0){
-            [[self.txtView textStorage] appendAttributedString:stringToAppend];
-            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.statusField documentView] frame]) - NSHeight([[self.statusField contentView] bounds]));
-            [[self.statusField documentView] scrollPoint:bottom];
-        }else if(nType == 1){
-            [[self.txtAppiumView textStorage] appendAttributedString:stringToAppend];
-            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.appumField documentView] frame]) - NSHeight([[self.appumField contentView] bounds]));
-            [[self.appumField documentView] scrollPoint:bottom];
-        }else if(nType == 2){
-            [[self.txtManagerView textStorage] appendAttributedString:stringToAppend];
-            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.managerField documentView] frame]) - NSHeight([[self.managerField contentView] bounds]));
-            [[self.managerField documentView] scrollPoint:bottom];
-        }
-    });
+//    NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+//    paragraphStyle.alignment = NSTextAlignmentLeft;
+////    paragraphStyle.lineSpacing = FONT_SIZE/2;
+//    NSFont * labelFont = [NSFont fontWithName:FONT_HELVETICA size:FONT_SIZE];
+//    if(nType == TYPE_MANAGER){
+//        labelFont = [NSFont fontWithName:FONT_HELVETICA size:13];
+//    }
+////    NSColor * labelColor = [NSColor colorWithWhite:1 alpha:1];
+//    NSColor* labelColor;
+//    if(nMode == 0){
+//        labelColor = [NSColor whiteColor];//verbose
+//    }else if(nMode == 1){
+//        labelColor = [NSColor redColor];//error
+//    }else if(nMode == 2){
+//        labelColor = [NSColor yellowColor];//warning
+//    }else if(nMode == 3){
+//        labelColor = [NSColor lightGrayColor];//mg//글씨가 잘 안보여서 수정//blueColor];//info
+//    }
+//    
+//    //mg//debug용 추가
+//    else if(nMode == 4){
+//        labelColor = [NSColor cyanColor];
+//    }
+//    
+//    NSShadow *shadow = [[NSShadow alloc] init];
+//    [shadow setShadowColor : BLACK_SHADOW];
+//    [shadow setShadowOffset : CGSizeMake (1.0, 1.0)];
+//    [shadow setShadowBlurRadius : 1];
+//
+//    
+//    NSAttributedString* stringToAppend = [[NSAttributedString alloc] initWithString:string attributes:@{
+//                                                                                                        NSParagraphStyleAttributeName : paragraphStyle,
+//                                                                                                        NSKernAttributeName : @2.0,
+//                                                                                                        NSFontAttributeName : labelFont,
+//                                                                                                        NSForegroundColorAttributeName : labelColor,
+//                                                                                                        NSShadowAttributeName : shadow }];
+//    
+//   
+//    dispatch_async(dispatch_get_main_queue(), ^{
+//        if(nType == 0){
+//            [[self.txtView textStorage] appendAttributedString:stringToAppend];
+//            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.statusField documentView] frame]) - NSHeight([[self.statusField contentView] bounds]));
+//            [[self.statusField documentView] scrollPoint:bottom];
+//        }else if(nType == 1){
+//            [[self.txtAppiumView textStorage] appendAttributedString:stringToAppend];
+//            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.appumField documentView] frame]) - NSHeight([[self.appumField contentView] bounds]));
+//            [[self.appumField documentView] scrollPoint:bottom];
+//        }else if(nType == 2){
+//            [[self.txtManagerView textStorage] appendAttributedString:stringToAppend];
+//            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.managerField documentView] frame]) - NSHeight([[self.managerField contentView] bounds]));
+//            [[self.managerField documentView] scrollPoint:bottom];
+//        }
+//    });
     // scrolls to the bottom
 }//appendStringValue
 

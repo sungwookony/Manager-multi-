@@ -175,6 +175,10 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     DDLogWarn(@"%s", __FUNCTION__);
     // This method is executed on the socketQueue (not the main thread)
     
+    ConnectionItemInfo * itemInfo = [self.mainController firstConnectionItemInfo];
+    NSLog(@"%d",itemInfo.deviceInfos.deviceNo);
+    [self commonResponse:YES reqCmd:0 msg:@"접속성공" deviceNo:itemInfo.deviceInfos.deviceNo];
+    
     if( (int)newSocket.localPort == (int)_nPort ) {
         connectedSocket = newSocket;
 //        [connectedSocket readDataWithTimeout:-1 tag:0];

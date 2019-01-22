@@ -71,7 +71,7 @@
     [self.window.contentView addSubview:self.mainVC.view];
     [self.window setContentMinSize:NSMakeSize(700, 500)];
 
-    NSString* version = [NSString stringWithFormat:@"ONYCOM iOS Manager [%@]",[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"]];
+    NSString* version = [NSString stringWithFormat:@"ONYCOM iOS DEP Manager [%@]",[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"]];
     
     [self.window setTitle:version];
     
@@ -84,6 +84,7 @@
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)theApplication {
+    DDLogInfo(@"%s",__FUNCTION__);
     return YES;
 }
 
@@ -122,6 +123,8 @@
     //mg//e
     
     [[NSNotificationCenter defaultCenter] postNotificationName:ApplicationWillTerminateNotification object:nil];
+    
+//    restartManager();
 }
 
 #pragma mark - <User Functions>
@@ -154,20 +157,20 @@ void uncauthExceptionHandler(NSException *exception)
 void restartManager() {
     DDLogDebug(@"1%s", __FUNCTION__);
     
-//    NSString *mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
-//    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
+    NSString *mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
+    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
 //    exit(0);
     DDLogInfo(@"%s", __FUNCTION__);
-    
-    NSString *path = [[NSBundle mainBundle] executablePath];
-    
-    NSLog(@"path = %@",path);
-    
-    NSTask * restartTask = [[NSTask alloc] init];
-    restartTask.launchPath = path;
-    [restartTask launch];
-    
-    [[NSApplication sharedApplication] terminate:nil];
+//
+//    NSString *path = [[NSBundle mainBundle] executablePath];
+//
+//    NSLog(@"path = %@",path);
+//
+//    NSTask * restartTask = [[NSTask alloc] init];
+//    restartTask.launchPath = path;
+//    [restartTask launch];
+//
+//    [[NSApplication sharedApplication] terminate:nil];
 }
 
 @end

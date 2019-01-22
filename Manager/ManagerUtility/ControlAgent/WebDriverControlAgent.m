@@ -2526,8 +2526,15 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     //status
     int nStatus = [[result objectForKey:@"status"] intValue];
     DDLogDebug(@"status=%d", nStatus);
-    if( 0 != nStatus )
+    if( 0 != nStatus ){
+        if(nStatus == 6){
+            NSString * sessionId = [result objectForKey:@"sessionId"];
+            DDLogDebug(@"session id = %@",sessionId);
+            if( sessionId)
+                self.sessionID = sessionId;
+        }
         return nil;
+    }
     
     //element list
     NSArray* arrayElem = [result objectForKey:@"value"];
@@ -2582,8 +2589,15 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     //status
     int nStatus = [[result objectForKey:@"status"] intValue];
     DDLogDebug(@"status=%d", nStatus);
-    if( 0 != nStatus )
+    if( 0 != nStatus ){
+        if(nStatus == 6){
+            NSString * sessionId = [result objectForKey:@"sessionId"];
+            DDLogDebug(@"session id = %@",sessionId);
+            if( sessionId)
+                self.sessionID = sessionId;
+        }
         return nil;
+    }
     
     //element list
     NSArray* arrayElem = [result objectForKey:@"value"];
