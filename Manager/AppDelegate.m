@@ -16,6 +16,9 @@
 
 #import "Utility.h"
 #import "ManagerLogFileFormat.h"
+#import <Sentry/Sentry.h>
+@import Sentry;
+
 
 @interface AppDelegate ()
 @property (nonatomic, strong) IBOutlet MainViewController *mainVC;
@@ -29,7 +32,17 @@
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     // Insert code here to initialize your application
 //    [self deduplicateRunningInstances];
-
+    
+    //Sentry 적용
+    NSError *error = nil;
+    SentryClient *client = [[SentryClient alloc] initWithDsn:@"https://5ed57147a5eb4bfd9996af3f51ab5e26@sentry.io/1375928" didFailWithError:&error];
+    SentryClient.sharedClient = client;
+    [SentryClient.sharedClient startCrashHandlerWithError:&error];
+    if (nil != error) {
+        NSLog(@"%@", error);
+    }
+    
+    
     //DDLOG 설정
 //    [DDLog addLogger:[DDASLLogger sharedInstance]]; //sends log statements to Apple System Logger, so they show up on Console.app
     [DDLog addLogger:[DDTTYLogger sharedInstance]]; //sends log statements to Xcode console - if available
@@ -59,6 +72,9 @@
     [DDLog addLogger:fileLogger];
      */
     //DDLogInfo(@"log file at: %@", [[fileLogger currentLogFileInfo] filePath]);
+    
+    
+    
 
     //Crush발생시에 로그 발생
     NSSetUncaughtExceptionHandler(&uncauthExceptionHandler);
@@ -71,7 +87,7 @@
     [self.window.contentView addSubview:self.mainVC.view];
     [self.window setContentMinSize:NSMakeSize(700, 500)];
 
-    NSString* version = [NSString stringWithFormat:@"ONYCOM iOS DEP Manager [%@]",[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"]];
+    NSString* version = [NSString stringWithFormat:@"ONYCOM iOS Manager [%@]",[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"]];
     
     [self.window setTitle:version];
     
@@ -124,6 +140,7 @@
     
     [[NSNotificationCenter defaultCenter] postNotificationName:ApplicationWillTerminateNotification object:nil];
     
+    //종료 없이 계속 재 시작
 //    restartManager();
 }
 
@@ -133,12 +150,18 @@
  */
 void uncauthExceptionHandler(NSException *exception)
 {
+    // Crash가 났을 때 재시작
+     restartManager();
+    
+    
     DDLogError(@"오류 CRASH : %@",exception);
     DDLogError(@"Stack Trace : %@",[exception callStackSymbols]);
     LogToFile(exception.description);
     LogToFile([exception callStackSymbols].description);
     
-    restartManager();
+    [SentryClient.sharedClient crash];
+    
+    
 }
 
 /**
@@ -155,12 +178,23 @@ void uncauthExceptionHandler(NSException *exception)
 }
 
 void restartManager() {
-    DDLogDebug(@"1%s", __FUNCTION__);
+    DDLogError(@"1%s", __FUNCTION__);
     
-    NSString *mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
+    NSString* mgr = nil;
+    
+    NSArray* array = [[[NSBundle mainBundle] bundlePath] componentsSeparatedByString:@"/"];
+    int nTotalCount = (int)[array count];
+    NSString* appName = [array objectAtIndex:nTotalCount-1];
+    DDLogInfo(@"AppName = %@",appName);
+    if([appName isEqualToString:@"Manager.app"]){
+        mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
+    }else{
+        mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
+    }
+    
     [[NSWorkspace sharedWorkspace] launchApplication:mgr];
 //    exit(0);
-    DDLogInfo(@"%s", __FUNCTION__);
+    DDLogError(@"%s", __FUNCTION__);
 //
 //    NSString *path = [[NSBundle mainBundle] executablePath];
 //

@@ -9,7 +9,6 @@
 #import "MainViewController.h"
 #import "Selenium.h"
 #import "ConnectionItemInfo.h"
-
 #import "CommunicatorWithDC.h"
 
 #import "DeviceLog.h"
@@ -227,7 +226,8 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 //    
 //    DDLogError(@"에러 로그");
 //    
-//    DDLogWarn(@"경고 로그");
+//    DDLogWarn(@"경고 로그");.
+//    NSString* bundleURL = [[NSBundle mainBundle] bundlePath];
 }
 
 /// @brief RemoteKeyboard 동작시 문자가 들어오는게 아니라.. 아스키코드값이 들어와서 아스키코드와 매칭되는 한글 문자를 변환하기 위한 값들을 저장한다.
@@ -620,7 +620,7 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
         DeviceInfos * deviceInfo = [[DeviceInfos alloc] init];
         deviceInfo.deviceNo = [theDeviceId intValue];
         deviceInfo.udid = theUdid;
-        deviceInfo.deviceName = theDeviceName;          // 이 값에 의해 해상도와 비율이 결정된다..
+        deviceInfo.deviceName = theDeviceName;          
         deviceInfo.productVersion = theDeviceVersion;
         deviceInfo.appiumPort = thePortNo.intValue;
         deviceInfo.ratio = theRatio.floatValue;
@@ -736,20 +736,32 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 
     DDLogWarn(@"test");
 
-    NSString *path = [[NSBundle mainBundle] executablePath];
-    
-    NSLog(@"path = %@",path);
-    NSString *mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
-    NSLog(@"path = %@",mgr);
-    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
-    exit(0);
-//    NSTask * restartTask = [[NSTask alloc] init];
-//    restartTask.launchPath = path;
-//    [restartTask launch];
+//    NSString *path = [[NSBundle mainBundle] executablePath];
+////
+////    NSLog(@"path = %@",path);
+////    NSString *mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
+////    NSLog(@"path = %@",mgr);
+////    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
+////    exit(0);
+////    NSTask * restartTask = [[NSTask alloc] init];
+////    restartTask.launchPath = path;
+////    [restartTask launch];
+////
+////    [[NSApplication sharedApplication] terminate:nil];
+//    NSArray * array =
+//    array = [NSArray arrayWithObjects: @"one", @"two", @"three", @"four", nil];
 //
-//    [[NSApplication sharedApplication] terminate:nil];
+//    [array objectAtIndex:8];
+//    [[NSHTTPCookieStorage sharedHTTPCookieStorage] deleteCookie:];
+    NSHTTPCookie *cookie;
     
+    NSHTTPCookieStorage *storage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
     
+    for (cookie in [storage cookies]) {
+        NSLog(@"1");
+        [storage deleteCookie:cookie];
+        
+    }
 }
 
 -(void) restartManager2 {
@@ -773,31 +785,24 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 
 - (IBAction)connectDevice:(id)sender
 {
-    ConnectionItemInfo* itemInfo = [self connectionItemInfoByDeviceNo:1];      //
-    if (itemInfo == nil) {
-        return;
+    NSString * commandString = [NSString stringWithFormat:@"idevicediagnostics restart"];
+    
+    NSTask * launchTask = [[NSTask alloc] init];
+    launchTask.launchPath = @"/bin/bash";
+    launchTask.arguments = @[@"-l", @"-c", commandString];
+    
+    NSPipe * outputPipe = [[NSPipe alloc] init];
+    [launchTask setStandardOutput:outputPipe];
+    NSFileHandle * outputHandle = [outputPipe fileHandleForReading];
+    
+    if( [NSThread isMainThread] ) {
+        [launchTask launch];
     } else {
-//        
-//        // modiby by leehh  아래는 자동화 시작시 devicelog 실행한다고 되어있기에 분기처리함.
-//        //        if( !manual ) {//swccc Log출력 확인
-//        if(manual){
-//            //(Log를 시작할 때마다 로그를 출력하면 로그가 중복되어, 디바이스 연결시에 로그 출력을 시작하고 로그 출력 커맨드가 왔을 때 로그를 D.C로 전송)
-//            if(itemInfo.myDeviceLog == nil)
-//                itemInfo.myDeviceLog = [[DeviceLog alloc] initWithDeviceNo:itemInfo.deviceNo UDID:itemInfo.myDeviceUdid];
-//            [itemInfo.myDeviceLog startLogAtFirst];
-//        }
-        
-        NSString* ratio = [NSString stringWithFormat:@"%.1f",itemInfo.deviceInfos.ratio];
-
-        NSDictionary* dict = [[NSDictionary alloc] initWithObjectsAndKeys:itemInfo.deviceInfos.udid,@"UDID"
-                              ,itemInfo.deviceInfos.deviceName,@"NAME"
-                              ,itemInfo.deviceInfos.productVersion,@"VERSION"
-                              ,ratio,@"RATIO"
-                              , nil];
-        
-        
-        [[NSNotificationCenter defaultCenter] postNotificationName:DEVICE_CONNECT object:self userInfo:dict];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [launchTask launch];
+        });
     }
+
 }
 
 - (IBAction)getPageSourceByXml:(id)sender {
@@ -957,59 +962,59 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 - (void)appendStringValue:(NSString*)string mode:(int)nMode type:(int)nType
 {
     
-//    NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-//    paragraphStyle.alignment = NSTextAlignmentLeft;
-////    paragraphStyle.lineSpacing = FONT_SIZE/2;
-//    NSFont * labelFont = [NSFont fontWithName:FONT_HELVETICA size:FONT_SIZE];
-//    if(nType == TYPE_MANAGER){
-//        labelFont = [NSFont fontWithName:FONT_HELVETICA size:13];
-//    }
-////    NSColor * labelColor = [NSColor colorWithWhite:1 alpha:1];
-//    NSColor* labelColor;
-//    if(nMode == 0){
-//        labelColor = [NSColor whiteColor];//verbose
-//    }else if(nMode == 1){
-//        labelColor = [NSColor redColor];//error
-//    }else if(nMode == 2){
-//        labelColor = [NSColor yellowColor];//warning
-//    }else if(nMode == 3){
-//        labelColor = [NSColor lightGrayColor];//mg//글씨가 잘 안보여서 수정//blueColor];//info
-//    }
-//    
-//    //mg//debug용 추가
-//    else if(nMode == 4){
-//        labelColor = [NSColor cyanColor];
-//    }
-//    
-//    NSShadow *shadow = [[NSShadow alloc] init];
-//    [shadow setShadowColor : BLACK_SHADOW];
-//    [shadow setShadowOffset : CGSizeMake (1.0, 1.0)];
-//    [shadow setShadowBlurRadius : 1];
-//
-//    
-//    NSAttributedString* stringToAppend = [[NSAttributedString alloc] initWithString:string attributes:@{
-//                                                                                                        NSParagraphStyleAttributeName : paragraphStyle,
-//                                                                                                        NSKernAttributeName : @2.0,
-//                                                                                                        NSFontAttributeName : labelFont,
-//                                                                                                        NSForegroundColorAttributeName : labelColor,
-//                                                                                                        NSShadowAttributeName : shadow }];
-//    
-//   
-//    dispatch_async(dispatch_get_main_queue(), ^{
-//        if(nType == 0){
-//            [[self.txtView textStorage] appendAttributedString:stringToAppend];
-//            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.statusField documentView] frame]) - NSHeight([[self.statusField contentView] bounds]));
-//            [[self.statusField documentView] scrollPoint:bottom];
-//        }else if(nType == 1){
-//            [[self.txtAppiumView textStorage] appendAttributedString:stringToAppend];
-//            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.appumField documentView] frame]) - NSHeight([[self.appumField contentView] bounds]));
-//            [[self.appumField documentView] scrollPoint:bottom];
-//        }else if(nType == 2){
-//            [[self.txtManagerView textStorage] appendAttributedString:stringToAppend];
-//            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.managerField documentView] frame]) - NSHeight([[self.managerField contentView] bounds]));
-//            [[self.managerField documentView] scrollPoint:bottom];
-//        }
-//    });
+    NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+    paragraphStyle.alignment = NSTextAlignmentLeft;
+//    paragraphStyle.lineSpacing = FONT_SIZE/2;
+    NSFont * labelFont = [NSFont fontWithName:FONT_HELVETICA size:FONT_SIZE];
+    if(nType == TYPE_MANAGER){
+        labelFont = [NSFont fontWithName:FONT_HELVETICA size:13];
+    }
+//    NSColor * labelColor = [NSColor colorWithWhite:1 alpha:1];
+    NSColor* labelColor;
+    if(nMode == 0){
+        labelColor = [NSColor whiteColor];//verbose
+    }else if(nMode == 1){
+        labelColor = [NSColor redColor];//error
+    }else if(nMode == 2){
+        labelColor = [NSColor yellowColor];//warning
+    }else if(nMode == 3){
+        labelColor = [NSColor lightGrayColor];//mg//글씨가 잘 안보여서 수정//blueColor];//info
+    }
+    
+    //mg//debug용 추가
+    else if(nMode == 4){
+        labelColor = [NSColor cyanColor];
+    }
+    
+    NSShadow *shadow = [[NSShadow alloc] init];
+    [shadow setShadowColor : BLACK_SHADOW];
+    [shadow setShadowOffset : CGSizeMake (1.0, 1.0)];
+    [shadow setShadowBlurRadius : 1];
+
+    
+    NSAttributedString* stringToAppend = [[NSAttributedString alloc] initWithString:string attributes:@{
+                                                                                                        NSParagraphStyleAttributeName : paragraphStyle,
+                                                                                                        NSKernAttributeName : @2.0,
+                                                                                                        NSFontAttributeName : labelFont,
+                                                                                                        NSForegroundColorAttributeName : labelColor,
+                                                                                                        NSShadowAttributeName : shadow }];
+    
+   
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if(nType == 0){
+            [[self.txtView textStorage] appendAttributedString:stringToAppend];
+            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.statusField documentView] frame]) - NSHeight([[self.statusField contentView] bounds]));
+            [[self.statusField documentView] scrollPoint:bottom];
+        }else if(nType == 1){
+            [[self.txtAppiumView textStorage] appendAttributedString:stringToAppend];
+            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.appumField documentView] frame]) - NSHeight([[self.appumField contentView] bounds]));
+            [[self.appumField documentView] scrollPoint:bottom];
+        }else if(nType == 2){
+            [[self.txtManagerView textStorage] appendAttributedString:stringToAppend];
+            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.managerField documentView] frame]) - NSHeight([[self.managerField contentView] bounds]));
+            [[self.managerField documentView] scrollPoint:bottom];
+        }
+    });
     // scrolls to the bottom
 }//appendStringValue
 

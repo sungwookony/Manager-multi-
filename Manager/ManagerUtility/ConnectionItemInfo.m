@@ -347,8 +347,9 @@
     
     if([_deviceInfos.productVersion intValue] > 9){
         __block __typeof__(self) blockSelf = self;
-        NSString * commandString = [NSString stringWithFormat:@"idevicedebug run %@", @"com.onycom.ResourceMornitor2"];
-        //NSString * commandString = [NSString stringWithFormat:@"idevicedebug -u %@ run com.onycom.ResourceMornitor2", self.deviceInfos.udid];//mg//add udid to kill process
+        //KB 는 ResourceMonitor4
+//        NSString * commandString = [NSString stringWithFormat:@"idevicedebug run %@", @"com.onycom.ResourceMornitor4"];
+        NSString * commandString = [NSString stringWithFormat:@"idevicedebug -u %@ run com.onycom.ResourceMornitor2", self.deviceInfos.udid];//mg//add udid to kill process
         
         NSTask * launchTask = [[NSTask alloc] init];
         launchTask.launchPath = @"/bin/bash";
@@ -591,7 +592,8 @@
     
     _deviceInitAppList = [((NSArray *)[self getAppListForDevice:NO]) copy];
     
-    //resource app 화면 표시됨//[self launchResource];
+    //resource app 화면 표시됨//
+
     [_cmtIProxy startIProxyTask];       // ResourceMornitor App 과 통신을 하기 위한 iProxy 를 실행한다.
     
     //(Log를 시작할 때마다 로그를 출력하면 로그가 중복되어, 디바이스 연결시에 로그 출력을 시작하고 로그 출력 커맨드가 왔을 때 로그를 D.C로 전송)
@@ -604,6 +606,15 @@
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3f * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0), ^{
         [_cmtIProxy connectResourceMornitor];
     });
+    
+    //홈화면부터 시작하기 위하여 190218 swccc
+    if([self.deviceInfos.productVersion intValue] > 11.5){
+        NSLog(@"######## VERSION 12 = %@ ##############",self.deviceInfos.productVersion);
+        [self.myAgent homescreen];
+    }else{
+        NSLog(@"######## VERSION 12 UNDER = %@ ##############",self.deviceInfos.productVersion);
+    }
+        
     
     //display
     NSString* ratio = [NSString stringWithFormat:@"%.1f", self.deviceInfos.ratio];
@@ -712,13 +723,17 @@
         // 실행중 한번 설치했던 파일은 두번째 설치가 안됨... 아래의 코드때문에....
         // 해당 버그는 다음 기회에....
         
+        
         //설치 중에 연결 종료 처리가 중복되면서, launchBundleId가 nil 로 변경되는 사례 발생
         if (_myAgent.launchBundleId != nil) {//mg//
             if( ![[self.dicBundleIDs objectForKey:_myAgent.launchBundleId] boolValue] ) {
                 [self.dicBundleIDs setObject:@YES forKey:_myAgent.launchBundleId];//crash : key=nil
                 _myAgent.nRetryCount = 0;
-                [_myAgent launchAppWithBundleID];
-                return;
+                //swcccc 홈자동화시작이 되면서 설치후 바로 시작 되는 기능 주석 처리 190515
+                [[CommunicatorWithDC sharedDCInterface] commonResponseForInstall:YES appId:responseName deviceNo:_deviceInfos.deviceNo];
+//                [_myAgent launchAppWithBundleID];
+//                return;
+                //swccc 190515
             }
             else{
                 [[CommunicatorWithDC sharedDCInterface] commonResponseForInstall:YES appId:responseName deviceNo:_deviceInfos.deviceNo];
@@ -812,6 +827,11 @@
 /// @brief  Tap
 - (void)doTapAtX:(float)argX andY:(float)argY{
     [_myAgent doTapAtX:argX andY:argY];
+//    for(int i = 0; i<10; i++){
+//        dispatch_sync(dispatch_get_main_queue(), ^(void){
+//            [_myAgent doTapAtX2:argX andY:argY];
+//        });
+//    }
 }
 
 /// @brief  Swipe... 자동화 기능이며, 구현은 했지만, 확인은 안해봄.. 위의 Drag & Drop 과 같은 처리가 되어있어서 동작할거라 판단됨.  후임자는 확인해보시길..
@@ -961,6 +981,12 @@
     DDLogInfo(@"Runapp : %@", bundleId);
     
     [self.dicBundleIDs setObject:@YES forKey:bundleId];
+    
+    //delay좀 줘라..
+    dispatch_time_t time = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f * NSEC_PER_SEC));
+    dispatch_after(time, dispatch_get_main_queue(), ^{
+    });
+    
     BOOL result = [_myAgent autoRunApp:bundleId];
     if( !result ) {
         [self.dicBundleIDs removeObjectForKey:bundleId];
@@ -1059,7 +1085,7 @@
     DDLogDebug(@"%s", __FUNCTION__);
     // 시작했을때 가져온 AppList 에서 현재의 AppList 를 가져와 비교해서 새로 추가된 App 들을 삭제한다.
     NSMutableDictionary * dicAppList = (NSMutableDictionary *)[self getAppListForDevice:YES];
-    DDLogDebug(@"current=%d, start=%d", [[dicAppList allKeys] count],  [_deviceInitAppList count]);
+//    DDLogDebug(@"current=%d, start=%d", [[dicAppList allKeys] count],  [_deviceInitAppList count]);
     
     for( NSString *appInfo in _deviceInitAppList ) {
         DDLogVerbose(@"exclude = %@", appInfo);
@@ -1087,8 +1113,14 @@
                 return;
             }
             
-            NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@ -u %@", appId, _deviceInfos.udid];
-
+            NSRange aRange = [appId rangeOfString:@"com.apple"];
+            if (aRange.location != NSNotFound)
+            {
+                return;
+            }
+            
+//            NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@ -u %@", appId, _deviceInfos.udid];
+            NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@", appId];
             NSString * output = [Utility launchTaskFromBash:commandString];
 //            DDLogInfo(@"[#### Info ####] rmeove output : \n%@", output);
             if([output hasSuffix:@"Complete"]){
@@ -1140,7 +1172,7 @@
 
 //mg//20180509//app 삭제
 - (void)removeApp: (NSString *)appId {
-    NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@ -u %@", appId, _deviceInfos.udid];
+    NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@ -u %@",  _deviceInfos.udid,appId];
     NSString * output = [Utility launchTaskFromBash:commandString];
     
     //해당 앱이 없어도 complete 표시. 별다른 오류 메시지 없음.
@@ -1211,6 +1243,7 @@
     else {
         // bundleID로 실행
         BOOL isInstalledApp = NO;
+        
 
         for(int i = 0; i<_deviceInitAppList.count; i++){
             NSString* temp = [[[_deviceInitAppList objectAtIndex:i] componentsSeparatedByString:@"|"] objectAtIndex:0];
@@ -1668,7 +1701,9 @@
     //하나의 PC에 여러개의 device가 물려있을 경우가 있으므로 self.myDeviceUdid값은 꼭 넣어준다. -u (UDID)
 //    [task setArguments: [[NSArray alloc] initWithObjects:@"-l", @"-u", self.deviceInfos.udid, nil]];
     //하나의 PC에 한개의 Device가 물려있을 경우의 명령어
-    [task setArguments: [[NSArray alloc] initWithObjects:@"-l", nil]];
+//    [task setArguments: [[NSArray alloc] initWithObjects:@"-l", nil]];
+    //해당 시스템앱까지 모두 호출 홈화면 시작에서 수정
+    [task setArguments:[[NSArray alloc] initWithObjects:@"-l",@"-o",@"list_all", nil]];
     
     if(![[NSFileManager defaultManager] isExecutableFileAtPath:[task launchPath]] || [[NSWorkspace sharedWorkspace] isFilePackageAtPath:[task launchPath]]){
 //        return nil;
@@ -1711,7 +1746,7 @@
     [task terminate];
     task = nil;
     
-    DDLogVerbose(@"output : %@",output);
+//    DDLogVerbose(@"output : %@",output);
     NSArray* list = nil;
     list = [output componentsSeparatedByString:@"\n"];
     
@@ -1765,6 +1800,8 @@
     return appList;
 }//getAppListForDevice
 
+
+#define XML
 /// @brief  idevice 화면 정보를 XML 로 가져와서 최상위 Element 에 "AppiumAUT" 엘리멘트를 추가한뒤 파일로 저장한다.
 /// @brief  uploadDumpFile 메소드에서 파일을 읽어서 처리한다... 굳이 파일로 저장할 필요는 없는데.. 디버깅용으로 저장해두는거 같다. (이전담당자가 이렇게 만들어놨음..)
 - (NSString *)saveToSourceFile
@@ -1781,13 +1818,64 @@
         }
         
         NSString* editPage = [page stringByReplacingOccurrencesOfString:@"<AppiumAUT>" withString:strRotation];
+#ifdef XML
         NSString* path = [NSString stringWithFormat:@"%@/%@.scene.xml", [self managerDirectoryForDevice], @"HomeScreen"];
         [editPage writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
         return path;
+#endif
+        
+#ifdef DESCRIPTION
+        NSLog(@"================================================================================================");
+        //총4번을 거쳐서 띄어쓰기가 있는지 확인해본다.
+        NSString* first = [self parseUnderLine:editPage];
+        NSString* two = [self parseUnderLine:first];
+        NSString* three = [self parseUnderLine:two];
+        NSString* output = [self parseUnderLine:three];
+        output = [output stringByReplacingOccurrencesOfString:@"(onycom)" withString:@"&#10;"];
+        NSLog(@"================================================================================================");
+//        NSLog(@"output = %@",output);
+        NSLog(@"================================================================================================");
+        NSString* path = [NSString stringWithFormat:@"%@/%@.scene.xml", [self managerDirectoryForDevice], @"HomeScreen"];
+        [output writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        
+        return path;
+
+#endif
     }
     
     return nil;
 }
+
+-(NSString *)parseUnderLine:(NSString *)source{
+
+    NSArray* temp = [source componentsSeparatedByString:@"\n"];
+    NSLog(@"count = %d",(int)temp.count);
+    int totalCount = (int)temp.count;
+    NSString* output = @"";
+
+    if(totalCount > 0){
+        for(int i = 0; i<totalCount; i++){
+            NSString* line = [NSString stringWithFormat:@"%@",[temp objectAtIndex:i]];
+            if([line containsString:@"label:"]){
+                output = [output stringByAppendingString:line];
+                NSArray* temp2 = [line componentsSeparatedByString:@"label: '"];
+                NSString* check = [NSString stringWithFormat:@"%@",[temp2 lastObject]];
+                if([check containsString:@"'"]){
+                    output = [output stringByAppendingString:@"\n"];
+                }else{
+                    //                       \n-> &#10;
+                    output = [output stringByAppendingString:@"(onycom)"];
+                }
+            }else{
+                output = [output stringByAppendingString:line];
+                output = [output stringByAppendingString:@"\n"];
+            }
+        }
+    }
+
+    return output;
+}
+
 
 /// @brief  사용하지 않음.
 - (NSString *)getBundleID {
@@ -1838,6 +1926,12 @@
     }
 }
 
+-(BOOL)deviceGetStatus{
+    BOOL bStatus = [_myAgent getStatus];
+    return bStatus;
+//    [_myAgent clearSafari];
+    return YES;
+}
 
 @end
 

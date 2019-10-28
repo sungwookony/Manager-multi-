@@ -114,13 +114,13 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     if( !requestData )
         return nil;
     
-    NSString * method = [requestData objectForKey:METHOD];          // POST, GET
-    NSDictionary * dicData = [requestData objectForKey:BODY];       // body -- JSon 포멧
-    NSString * command = [requestData objectForKey:CMD];            // 명령
-    int nPort = [[requestData objectForKey:PORT] intValue];         // 통신 포트번호
+    NSString * method = [requestData objectForKey:METHOD];              // POST, GET
+    NSDictionary * dicData = [requestData objectForKey:BODY];           // body -- JSon 포멧
+    NSString * command = [requestData objectForKey:CMD];                // 명령
+    int nPort = [[requestData objectForKey:PORT] intValue];             // 통신 포트번호
     float timeout = [[requestData objectForKey:TIME_OUT] floatValue];   // 통신에 대한 타임아웃 값(second)
-    NSString * sessionId = [requestData objectForKey:SESSION_ID];   // 앱의 UDID
-    NSString * elementId = [requestData objectForKey:ELEMENT_ID];     // ELEMENT ID
+    NSString * sessionId = [requestData objectForKey:SESSION_ID];       // 앱의 UDID
+    NSString * elementId = [requestData objectForKey:ELEMENT_ID];       // ELEMENT ID
     
     NSError * error = nil;
     NSString * strURL = nil;
@@ -425,7 +425,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     
     NSString * commandString = [NSString stringWithFormat:@"xcodebuild test-without-building -xctestrun %@/PreBuild4WDA/%@/Build/Products/%@ -destination id=%@", [Utility managerDirectory], self.deviceInfos.udid, _xctestRun, self.deviceInfos.udid];
     // @endcode
-    //DDLogVerbose(@"start command = %@",commandString);
+    DDLogVerbose(@"start command = %@",commandString);
     
     _myWDATask = [[NSTask alloc] init];
     _myWDATask.launchPath = @"/bin/bash";
@@ -838,14 +838,31 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 }
 
 /// @brief launchAppWithBundleID 메소드와 동일한 역활을 한다.
+// 전달 값이 1일때 재시작 0일때 해당 앱 그대로 실행을 하여준다.
 - (BOOL) launchAppWithBundleID:(NSString *)bundleID {
-    DDLogInfo(@"### LAUNCH BUNDLE ID = %@", bundleID);
+    DDLogInfo(@"#### LAUNCH BUNDLE ID = %@", bundleID);
     
-    NSDictionary * body = @{@"desiredCapabilities":@{
-                                    @"bundleId":bundleID,
-                                    }};
+    NSArray* temp = [bundleID componentsSeparatedByString:@"|"];
+    NSString* restart = @"0";
     
-    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:15.], CMD:@"/session", BODY:body};
+    if(temp.count > 1){
+        restart = [temp objectAtIndex:1];
+    }
+    bundleID = [temp objectAtIndex:0];
+
+    NSDictionary * requestData = nil;
+    if([restart isEqualToString:@"1"]){
+        DDLogInfo(@"앱 처음부터 실행");
+        NSDictionary * body = @{@"desiredCapabilities":@{
+                                        @"bundleId":bundleID,
+                                        }};
+        requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:120.], CMD:@"/session", BODY:body};
+    }else{
+        DDLogInfo(@"앱 그냥 실행 = %@",bundleID);
+        NSDictionary * body = @{@"bundleId":bundleID};
+        requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:120.], CMD:@"/wda/apps/activate", BODY:body, SESSION_ID:self.sessionID};
+    }
+    NSLog(@"request = %@",requestData);
     
     __block NSDictionary * result = nil;
     dispatch_sync(_launchAppQueue, ^{
@@ -871,7 +888,6 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         return NO;
     }
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1084,6 +1100,37 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     NSDictionary * body = @{@"x":[NSNumber numberWithFloat:newArgX], @"y":[NSNumber numberWithFloat:newArgY], @"duration":[NSNumber numberWithFloat:0.1]};
     
     NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/touchAndHold", BODY:body, SESSION_ID:self.sessionID};
+//    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/tap0/0", BODY:body, SESSION_ID:self.sessionID};
+
+    NSDictionary * result = [self syncRequest:requestData];
+    DDLogInfo(@"tap result = %@",result);
+    if( result ) {
+        DDLogInfo(@"성공");
+    } else {
+        DDLogInfo(@"실패");
+    }
+    NSString * sessionId = [result objectForKey:@"sessionId"];
+    if( sessionId)
+        self.sessionID = sessionId;
+    else
+        NSLog(@"흠...");
+}
+
+- (void)doTapAtX2:(float)argX andY:(float)argY{
+    if (!self.bLaunchDone || nil == _sessionID ) return;
+    
+    NSLog(@"%s, %d -- %.2f, %.2f",__FUNCTION__, self.deviceInfos.deviceNo, argX, argY);
+    float ratio = (float)self.deviceInfos.ratio;
+    
+    int newArgX = argX/ratio;
+    int newArgY = argY/ratio;
+    
+    NSLog(@"%s, %d -- %d, %d",__FUNCTION__, self.deviceInfos.deviceNo, newArgX, newArgY);
+    NSDictionary * body = @{@"x":[NSNumber numberWithFloat:newArgX], @"y":[NSNumber numberWithFloat:newArgY], @"duration":[NSNumber numberWithFloat:0.1]};
+    
+//    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/tap/0", BODY:body, SESSION_ID:self.sessionID};
+    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/doubleTap", BODY:body, SESSION_ID:self.sessionID};
+
     NSDictionary * result = [self syncRequest:requestData];
     DDLogInfo(@"tap result = %@",result);
     if( result ) {
@@ -1153,10 +1200,9 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 
 /// @brief  드레그
 - (void)doTouchMoveAtX:(int)argX andY:(int)argY{
-    DDLogInfo(@"%s, %d",__FUNCTION__, self.deviceInfos.deviceNo);
     
     if (!self.bLaunchDone) {
-        DDLogInfo(@"%s, %d, did not launched", __FUNCTION__, deviceInfos.deviceNo);
+
         return;
     }
     
@@ -1265,9 +1311,9 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         
         NSDictionary* resultKeyboard = [self syncRequest:requestKeyBoardData];
         
-        NSLog(@"key resulst = %@",resultKeyboard);
+        DDLogInfo(@"key resulst = %@",resultKeyboard);
         int nStatus = [[resultKeyboard objectForKey:@"status"] intValue];
-        NSLog(@"nstatus = %d",nStatus);
+        DDLogInfo(@"nstatus = %d",nStatus);
         
         // 단일객체 검색일 경우.
         // "value" : {
@@ -1306,8 +1352,10 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
                     
                     NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/keys", BODY:body, SESSION_ID:self.sessionID};
                     NSDictionary * result = [self syncRequest:requestData];
+                    DDLogInfo(@"input text = %@",result);
                     if( result ) {
                         DDLogInfo(@"%s success", __FUNCTION__);
+                        
                         [[CommunicatorWithDC sharedDCInterface] commonResponse:YES deviceNo:self.deviceInfos.deviceNo];
                     } else {
                         NSLog(@"실패");
@@ -1324,6 +1372,8 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
                     
                 }
             });
+        }else{
+            [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:self.deviceInfos.deviceNo];
         }
     });
 }
@@ -1416,7 +1466,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
                 
                 NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/keys", BODY:body, SESSION_ID:self.sessionID};
                 NSDictionary * result = [self syncRequest:requestData];
-            
+                DDLogInfo(@"result = %@", result);
                 if( result ) {
                     [[CommunicatorWithDC sharedDCInterface] commonResponse:YES deviceNo:self.deviceInfos.deviceNo];
                     
@@ -1585,7 +1635,8 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     
     NSDictionary * body;
     if(bLand){
-        body = @{@"orientation":@"LANDSCAPE"};
+//        body = @{@"orientation":@"LANDSCAPE"};
+        body = @{@"orientation":@"UIA_DEVICE_ORIENTATION_LANDSCAPERIGHT"};
     }else{
         body = @{@"orientation":@"PORTRAIT"};
     }
@@ -1641,10 +1692,16 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         }
         
         NSString * resultValue = [result objectForKey:@"value"];
-        DDLogVerbose(@"value : %@", resultValue);
+//        DDLogVerbose(@"value : %@", resultValue);
+//        DDLogVerbose(@"result : %@", result);
+        
         
         strValue = [resultValue stringByReplacingOccurrencesOfString:@"<?xml version=\"1.0\" encoding=\"UTF-8\"?>" withString:@"<?xml version=\"1.0\" encoding=\"UTF-8\"?><AppiumAUT>"];
-        strValue = [strValue stringByAppendingString:@"</AppiumAUT>"];
+        if([strValue containsString:@"<AppiumAUT>"])
+            strValue = [strValue stringByAppendingString:@"</AppiumAUT>"];
+        
+        // DESCRIPTION 으로 할떄 추가해준다. swccc
+//        strValue = [strValue stringByAppendingString:[NSString stringWithFormat:@"<ORIENTATION=%d>",[self deviceOrientation]]];
     } else {
         DDLogError(@"error = %d", nResult);
 
@@ -1658,10 +1715,51 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     return strValue;
 }
 
+-(int)deviceOrientation{
+    if (!self.bLaunchDone || nil == _sessionID ) return NO;
+    
+    NSString* command = [NSString stringWithFormat:@"/session/%@/orientation",self.sessionID];
+    NSDictionary * requestData = @{METHOD:@"GET", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:command};
+    NSDictionary * result = [self syncRequest:requestData];
+    
+    if(result){
+        NSString* value = [result objectForKey:@"value"];
+        if([value isEqualToString:@"LANDSCAPE"]){
+            return 1;
+        }else{
+            return 0;
+        }
+        
+    }else{
+        return -1;
+    }
+}
+
+
 /// @brief bundleID 로 앱을 실행한다.
 - (BOOL) autoRunApp:(NSString *)bundleId {
+    // 홈화면으로 이동하여 준다.
+    [self hardKeyEvent:3 longpress:0];
+//    BOOL bResult = [self connectStatus];
+//    NSLog(@"#### %d ####",bResult);  
     return [self launchAppWithBundleID:bundleId];
 }
+
+-(BOOL)connectStatus{
+    NSDictionary * requestData = @{METHOD:@"GET", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:1.0f], CMD:@"/status"};
+    NSDictionary * result = [self syncRequest:requestData];
+    DDLogVerbose(@"### STATUS RESULT ### \n %@", result);
+    int nResult = [[result objectForKey:@"status"] intValue];
+    if(nResult == 0 && result != nil){
+        return YES;
+    }else{
+        NSLog(@"### 다시 체크 ####");
+        [self performSelector:@selector(connectStatus) withObject:nil afterDelay:2.0];
+    }
+    return NO;
+}
+
+
 
 /// @brief  스크린 이미지 한장을 가져온다.
 - (NSData *)getScreenShot {
@@ -1731,7 +1829,8 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         else
             NSLog(@"흠...");
         
-        return ([[result objectForKey:@"value"] isEqualToString:@"LANDSCAPE"] ? SELENIUM_SCREEN_ORIENTATION_LANDSCAPE :SELENIUM_SCREEN_ORIENTATION_PORTRAIT);
+//        return ([[result objectForKey:@"value"] isEqualToString:@"LANDSCAPE"] ? SELENIUM_SCREEN_ORIENTATION_LANDSCAPE :SELENIUM_SCREEN_ORIENTATION_PORTRAIT);
+        return ([[result objectForKey:@"value"] isEqualToString:@"PORTRAIT"] ? SELENIUM_SCREEN_ORIENTATION_PORTRAIT :SELENIUM_SCREEN_ORIENTATION_LANDSCAPE);
     } else {
         NSLog(@"%s -- 실패", __FUNCTION__);
         if( 1001 == nResult ) {
@@ -1861,65 +1960,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     return bView;
 }
 
-//mg//
-/// @brief  DC 에서 넘겨준 객체정보로 객체를 찾는다.
-/*- (void)automationSearch:(NSData *)data andSelect:(BOOL)bSelect{
-    DDLogDebug(@"%s", __FUNCTION__);
-    
-    if(!self.bLaunchDone) {
-        [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:deviceInfos.deviceNo];
-        return;
-    }
-    
-    SelectObject* obj = [self automationSearchParsing:data andSelect:bSelect];
-    NSString *elementLabel = nil;
-    bool bUseClassIndex = NO;
-
-    @autoreleasepool {
-        //검색방식 xpath
-//        NSDictionary * elem = [self getElementByTargetInfo:obj];
-        
-        NSDictionary* elem = nil;
-            //검색방식 String
-            elem = [self getElementByTargetString:obj];
-            
-        BOOL bRes = NO;
-        
-        if(elem != nil){
-//            bRes = [self elementIsDisplayed:elem];
-            //Scene 할때 어차피 보이는 부분이기 때문에 할 필요 없다.
-            bRes = YES;
-            if( obj.scrollType != 0 && !bRes )
-            {
-                bRes = [self scrollToView:elem ScrollObj:obj];
-            }
-            
-            if( bRes ) {
-                if(bSelect){
-                    [self pressElement:elem isLong:(obj.longPress==1)? YES:NO];
-                }
-                bRes = YES;
-                if( [obj.scrollClass caseInsensitiveCompare:@"Class"] == 0) {
-                    bUseClassIndex = YES;
-//                    elementLabel = [self getElementAttribute:elem attribute:@"value"];
-                    elementLabel = [self getElementAttributeName:elem attribute:@"name"];
-                    DDLogInfo(@"label = %@",elementLabel);
-                    
-                }//if : class search
-            }//if : search succeeded
-        }//if : search succeeded
-        
-        if( bUseClassIndex) {
-            [[CommunicatorWithDC sharedDCInterface] commonResponseClassIndex:bRes elemLabel:elementLabel deviceNo:deviceInfos.deviceNo];
-        } else {
-            [[CommunicatorWithDC sharedDCInterface] commonResponse:bRes deviceNo:deviceInfos.deviceNo];
-        }
-    }//autoreleasepool
-}//automationSearch
-*/
-
-//mg//
-/// @brief  DC 에서 넘겨준 객체정보로 객체를 찾는다.
+// @brief  DC 에서 넘겨준 객체정보로 객체를 찾는다.
 - (void)automationSearch:(NSData *)data andSelect:(BOOL)bSelect{
     DDLogDebug(@"%s", __FUNCTION__);
 
@@ -1942,7 +1983,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         
         if(elem == nil){
             DDLogInfo(@"elem 검색 실패");
-//            elem = [self getElementByTargetInfo:obj];
+            elem = [self getElementByTargetInfo:obj];
         }else{
             DDLogInfo(@"elem 검색 성공");
         }
@@ -2078,6 +2119,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     if(pressLong){
         NSDictionary* bodySwipe = @{@"duration":@2.0f};
         NSString * strCmd = [NSString stringWithFormat:@"/wda/element/%@/touchAndHold", [elem objectForKey:@"ELEMENT"]];
+//        NSString * strCmd = [NSString stringWithFormat:@"/wda/tap/%@", [elem objectForKey:@"ELEMENT"]];
         NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], BODY:bodySwipe, CMD:strCmd, SESSION_ID:self.sessionID};
         
         DDLogInfo(@"%s -- cmd : %@", __FUNCTION__, strCmd);
@@ -2089,11 +2131,12 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 //        NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:strCmd, SESSION_ID:self.sessionID};
         
         NSDictionary* bodySwipe = @{@"duration":@0.1f};
+
         //옥수수를 위하여 Click으로 잠시 변경 swccc
         // 자동화에서는 TouchAndHold보다 Click 이벤트를 줄떄 객체를 선택 및 터치 확률이 높음 계속 유지할 것
 
         NSString * strCmd = [NSString stringWithFormat:@"/wda/element/%@/touchAndHold", [elem objectForKey:@"ELEMENT"]];
-
+//        NSString * strCmd = [NSString stringWithFormat:@"/wda/tap/%@", [elem objectForKey:@"ELEMENT"]];
         NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], BODY:bodySwipe, CMD:strCmd, SESSION_ID:self.sessionID};
         
         DDLogInfo(@"%s -- cmd : %@", __FUNCTION__, strCmd);
@@ -2407,87 +2450,12 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     return temp;
 }
 
-//mg
-// @brief link text로 WDA에 검색을 요청하여 찾는다.
-// @param obj 객체 정보
-/*-(NSDictionary *)getElementByTargetString:(SelectObject *)obj{
-    
-//    curl -X POST $JSON_HEADER \
-//    -d "{\"using\":\"predicate string\",\"value\":\"wdVisible==1 AND type=='XCUIElementTypeButton' AND label='브랜드'\"}" \
-//    $DEVICE_URL/session/7E46BFA0-D7FC-46DA-B4AC-32D8D17D08B0/elements
-    
-//    NSMutableString * temp = [NSMutableString stringWithFormat:@"//%@", obj.targetClass];
-//    NSMutableString* temp = [NSMutableString stringWithFormat:@"wdVisible==1 AND type==\'%@\' AND label='%@'", obj.targetClass, obj.targetLabel];
-    
-    DDLogDebug(@"%s", __FUNCTION__);
-    
-    NSArray* arrayElem = nil;
-    NSMutableString* temp = [[NSMutableString alloc] init];
-
-    if( obj.targetName.length || obj.targetValue.length ) {
-        if(obj.targetName.length > 0)
-            temp = [NSMutableString stringWithFormat:@"type==\'%@\' AND name='%@'", obj.targetClass, obj.targetName];
-        else
-            temp = [NSMutableString stringWithFormat:@"type==\'%@\' AND value='%@'", obj.targetClass, obj.targetValue];
-    }else
-        //Visible이
-//        temp = [NSMutableString stringWithFormat:@"wdVisible==1  AND type==\'%@\' ", obj.targetClass];
-        temp = [NSMutableString stringWithFormat:@"type==\'%@\' ",obj.targetClass];
-
-    NSDictionary * body = @{@"using":@"predicate string", @"value":temp};
-    DDLogVerbose(@"search query = %@", temp);
-    
-    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
-    
-    NSDictionary * result = [self syncRequest:requestData];
-    DDLogDebug(@"getElementByTargetInfo result = %@",result);
-    if (result == nil)
-        return nil;
-    
-    int nStatus = [[result objectForKey:@"status"] intValue];
-    if( 0 == nStatus ) {
-        DDLogDebug(@"성공");
-        arrayElem = [result objectForKey:@"value"];
-    } else
-        DDLogDebug(@"실패");
-    
-    NSString * sessionId = [result objectForKey:@"sessionId"];
-    if( sessionId)
-        self.sessionID = sessionId;
-    else
-        NSLog(@"흠...");
-    
-    if (arrayElem == nil || arrayElem.count ==0) {
-        DDLogInfo(@"findElementsBy Failed class='%@' name='%@' value='%@'", obj.targetClass, obj.targetName, obj.targetValue);
-        return nil;
-    } else { // filter targetClass match
-        //        long classCount = arrayElem.count;
-        //        int classIndex = obj.instance;
-        if(arrayElem.count > 1) {
-            DDLogInfo(@"found %lu elements", arrayElem.count);
-            DDLogInfo(@"object info : name:%@, label:%@, value:%@, index:%d",
-                      obj.targetName, obj.targetLabel, obj.targetValue, obj.instance);
-            
-            if( obj.instance >= arrayElem.count ) {
-                DDLogError(@"검색결과 보다 찾는 위치가 큼.. 다른 UI 수 있음.");
-                return nil;
-            }
-            //obj.instance 가 array 의 카운트보다 높게 나올경우 죽는다 ERROR 확인
-            return [arrayElem objectAtIndex:(int)obj.instance];
-        } else {
-            return [arrayElem objectAtIndex:0];
-        }
-    }//if - else : array
-}//getElementByTargetString
-*/
-
-//mg
 // @brief link text로 WDA에 검색을 요청하여 찾는다.
 // @param obj 객체 정보
 -(NSDictionary *)getElementByTargetString:(SelectObject *)obj{
     DDLogDebug(@"%s", __FUNCTION__);
     
-    //query
+    //query₩
     NSMutableString* temp = [[NSMutableString alloc] init];
     temp = [NSMutableString stringWithFormat:@"type == '%@'", obj.targetClass];// AND visible == 1
 //    temp = [NSMutableString stringWithFormat:@"wdVisible==1 AND type == '%@'", obj.targetClass];// AND visible == 1
@@ -2495,27 +2463,33 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     
     DDLogVerbose(@"type=%@ name=%@ value=%@ label=%@ instance=%d", obj.targetClass, obj.targetName, obj.targetValue, obj.targetLabel, obj.instance);
     
-    if( obj.targetName.length >0)
-        [temp appendString:[NSMutableString stringWithFormat:@" AND name='%@' AND wdVisible==1", obj.targetName]];
-    //mg//substring test//[temp appendString:[NSMutableString stringWithFormat:@" AND name CONTAINS[c] '%@'", obj.targetName]];
-    else if(obj.targetValue.length >0)
-        [temp appendString:[NSMutableString stringWithFormat:@" AND value='%@' AND wdVisible==1", obj.targetValue]];
-    else
-        [temp appendString:[NSMutableString stringWithFormat:@" AND wdVisible==1"]];
-//    if( obj.targetName.length >0)
-//        [temp appendString:[NSMutableString stringWithFormat:@" AND name='%@'", obj.targetName]];
-//    //mg//substring test//[temp appendString:[NSMutableString stringWithFormat:@" AND name CONTAINS[c] '%@'", obj.targetName]];
-//    else if(obj.targetValue.length >0)
-//        [temp appendString:[NSMutableString stringWithFormat:@" AND value='%@'", obj.targetValue]];
-//    else
+    if(obj.targetName.length == 0 && obj.targetLabel.length == 0 && obj.targetValue.length ==0){
 //        [temp appendString:[NSMutableString stringWithFormat:@" AND wdVisible==1"]];
+    }else{
+        if( obj.targetName.length >0)
+            [temp appendString:[NSMutableString stringWithFormat:@" AND name='%@'", obj.targetName]];
+        else
+            [temp appendString:[NSMutableString stringWithFormat:@" AND name=null"]];
+        
+        if(obj.targetValue.length >0)
+            [temp appendString:[NSMutableString stringWithFormat:@" AND value='%@'", obj.targetValue]];
+        else
+            [temp appendString:[NSMutableString stringWithFormat:@" AND value=null"]];
+        
+        if(obj.targetLabel.length >0)
+            [temp appendString:[NSMutableString stringWithFormat:@" AND label='%@'", obj.targetLabel]];
+        else
+            [temp appendString:[NSMutableString stringWithFormat:@" AND label=null"]];
+    }
     
+    //전체 검색을 하기 위하여 해당 기능은 삭제 한다(통일성을 위하여 맞춰준다.)
+//    [temp appendString:[NSMutableString stringWithFormat:@" AND wdVisible==1"]];
     //http request
     NSDictionary * body = @{@"using":@"predicate string", @"value":temp};
-    DDLogVerbose(@"search query : %@", temp);
-    
-    //mg//timeout TIMEOUT_COMMAND->30
-    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:30.0f], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
+    DDLogInfo(@"search query : %@", temp);
+
+    //swccc//timeout TIMEOUT_COMMAND->60
+    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:60.0f], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
     
     //response
     NSDictionary * result = [self syncRequest:requestData];
@@ -2719,6 +2693,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
                                  (obj.targetName.length ? [NSString stringWithFormat:@"@name=\"%@\"", obj.targetName] : @""),
                                  (((obj.targetName.length > 0) && (obj.targetValue.length > 0)) ? @" and ": @""),
                                  (obj.targetValue.length ? [NSString stringWithFormat:@"@value=\"%@\"", obj.targetValue] : @"")]];
+            
         }
         DDLogInfo(@"xPath = %@",xPath);
         
@@ -2731,7 +2706,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 //        }
         
         
-        NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
+        NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:60.0f], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
         NSDictionary * result = [self syncRequest:requestData];
         DDLogInfo(@"getElementByTargetInfo result = %@",result);
         
@@ -2842,6 +2817,84 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     DDLogInfo(@"%s = %@",__FUNCTION__,result);
     
     return true;
+}
+
+-(BOOL)getStatus{
+    NSDictionary * requestData = @{METHOD:@"GET", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:1.0f], CMD:@"/status"};
+    NSDictionary * result = [self syncRequest:requestData];
+    NSLog(@"result = %@",result);
+    if(result != nil){
+        int nStatus = [[result objectForKey:@"status"] intValue];
+        if(nStatus == 0){
+            return YES;
+        }else{
+            return NO;
+        }
+    }else{
+        return NO;
+    }
+}
+
+/// @brief  BundleID 로 앱을 실행시켜 새로운 Session (udid) 를 생성한다.
+-(void)clearSafari {
+    DDLogInfo(@"### LAUNCH BUNDLE ID = %@", self.launchBundleId);
+    //설정화면 실행하기
+    NSDictionary * body = @{@"desiredCapabilities":@{
+                                    @"bundleId":@"com.apple.Preferences",
+                                    }};
+    
+    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:5 * 60.0f], CMD:@"/session", BODY:body};
+    
+    __block NSDictionary * result = nil;
+    dispatch_sync(_launchAppQueue, ^{
+        result = [self syncRequest:requestData];;
+    });
+    
+    if( !result ) {
+        DDLogError(@"%s -- 결과 없음", __FUNCTION__);
+        if( [customDelegate respondsToSelector:@selector(applicationLaunchFailed:)] ) {
+            [customDelegate applicationLaunchFailed:@"WebDriverAgent 연결 실패1"];
+        }
+    }else{
+        int nResult = [[result objectForKey:@"status"] intValue];
+        if( 0 == nResult ) {
+            self.sessionID = [result objectForKey:@"sessionId"];
+            DDLogInfo(@"[#### Info ####] after Session ID : %@\n\n", self.sessionID);
+            
+            [self elementSelect:@"XCUIElementTypeCell" elementName:@"Safari" andSelect:YES];
+            
+            [self elementSelect:@"XCUIElementTypeCell" elementName:@"방문 기록 및 웹 사이트 데이터 지우기" andSelect:YES];
+            
+            [self elementSelect:@"XCUIElementTypeButton" elementName:@"방문 기록 및 데이터 지우기" andSelect:YES];
+            
+            [self homescreen];
+        }
+    }
+}
+
+-(void) elementSelect:(NSString *)type elementName:(NSString *) name andSelect:(BOOL)bSelect{
+    NSMutableString* temp = [[NSMutableString alloc] init];
+    temp = [NSMutableString stringWithFormat:@"type == '%@'", type];
+    [temp appendString:[NSMutableString stringWithFormat:@" AND name='%@'", name]];
+    
+    //http request
+    NSDictionary * body = @{@"using":@"predicate string", @"value":temp};
+    DDLogVerbose(@"search query : %@", temp);
+    
+    //mg//timeout TIMEOUT_COMMAND->30
+    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:30.0f], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
+    
+    //response
+    NSDictionary * result = [self syncRequest:requestData];
+    if(result){
+        int nResult = [[result objectForKey:@"status"] intValue];
+        if(nResult == 0){
+            NSArray* arrayElem = [result objectForKey:@"value"];
+            NSDictionary* elem = nil;
+            elem = [arrayElem objectAtIndex:0];
+            [self pressElement:elem isLong:bSelect];
+        }
+    }
 }
 
 @end

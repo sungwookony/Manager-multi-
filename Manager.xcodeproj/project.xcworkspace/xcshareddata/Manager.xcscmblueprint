@@ -1,5 +1,5 @@
 {
-  "DVTSourceControlWorkspaceBlueprintPrimaryRemoteRepositoryKey" : "ef8c88d0-302a-d348-a277-d65801683f4e",
+  "DVTSourceControlWorkspaceBlueprintPrimaryRemoteRepositoryKey" : "CC2AC9AD95FD6B0B20A3C50723A67370475F519B",
   "DVTSourceControlWorkspaceBlueprintWorkingCopyRepositoryLocationsKey" : {
     "ef8c88d0-302a-d348-a277-d65801683f4e" : {
 
@@ -9,13 +9,15 @@
     }
   },
   "DVTSourceControlWorkspaceBlueprintWorkingCopyStatesKey" : {
-    "ef8c88d0-302a-d348-a277-d65801683f4e" : 0,
-    "515093d1-714b-fd4f-982e-126d0c1a9554" : 9223372036854775807
+    "CC2AC9AD95FD6B0B20A3C50723A67370475F519B" : 0,
+    "515093d1-714b-fd4f-982e-126d0c1a9554" : 9223372036854775807,
+    "ef8c88d0-302a-d348-a277-d65801683f4e" : 0
   },
   "DVTSourceControlWorkspaceBlueprintIdentifierKey" : "EE18F3A4-048E-4E08-949B-FF4F7AB28A6F",
   "DVTSourceControlWorkspaceBlueprintWorkingCopyPathsKey" : {
-    "ef8c88d0-302a-d348-a277-d65801683f4e" : "Manager_XCUITest_2_2_1\/",
-    "515093d1-714b-fd4f-982e-126d0c1a9554" : "root\/"
+    "CC2AC9AD95FD6B0B20A3C50723A67370475F519B" : "Manager\/",
+    "515093d1-714b-fd4f-982e-126d0c1a9554" : "root\/",
+    "ef8c88d0-302a-d348-a277-d65801683f4e" : "Manager_XCUITest_2_2_1\/"
   },
   "DVTSourceControlWorkspaceBlueprintNameKey" : "Manager",
   "DVTSourceControlWorkspaceBlueprintVersion" : 204,
@@ -25,6 +27,11 @@
       "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "https:\/\/192.168.0.25\/svn\/Manager_XCUITest",
       "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Subversion",
       "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "515093d1-714b-fd4f-982e-126d0c1a9554"
+    },
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "https:\/\/github.com\/onycom-AppsRay\/Manager.git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "CC2AC9AD95FD6B0B20A3C50723A67370475F519B"
     },
     {
       "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "https:\/\/192.168.1.55\/svn\/Manager_XCUITest_2_2_1",

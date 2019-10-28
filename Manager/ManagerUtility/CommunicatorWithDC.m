@@ -41,7 +41,7 @@
     dispatch_queue_t        infoQueue;//mg//멀티 단말기 다음에//[20];
     
     /// @brief GCD Semaphore (동시 접근/사용 제어)
-    dispatch_semaphore_t    infoSem;//mg//멀티 단말기 보류//[20];                 // add by leehh
+    dispatch_semaphore_t    infoSem;  //mg//멀티 단말기 보류//[20];                 // add by leehh
 }
 
 /// @brief Manual Socket 포트번호
@@ -451,16 +451,25 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             
             [itemInfo stopAgent];
 
-            if( [[itemInfo getLaunchBundleId] length] ) {
-                const uint8_t * clear = (packet ? (uint8_t *)packet.bytes : NULL);
-                if( clear ) {
-                    if ((int)clear[0] == 0)// packet 이 존재하며, clear == 0 인 상태 앱을 삭제 하지 않는다.
-                        return;
-                }
-                
-                 // !packet 기존 아무것도 없을때, clear == 1 clear 명령을 받을 때
-                [itemInfo removeInstalledApp:NO];          // Clear 명령을 받으면 resetAppium 의 결과과 도달할 때 까지 기대렸다가 호출되는것으로 변경됨.
-            }//if : 시작할 때 앱 설치
+//            if( [[itemInfo getLaunchBundleId] length] ) {
+//                const uint8_t * clear = (packet ? (uint8_t *)packet.bytes : NULL);
+//                if( clear ) {
+//                    if ((int)clear[0] == 0)// packet 이 존재하며, clear == 0 인 상태 앱을 삭제 하지 않는다.
+//                        return;
+//                }
+//
+//                 // !packet 기존 아무것도 없을때, clear == 1 clear 명령을 받을 때
+//                [itemInfo removeInstalledApp:NO];          // Clear 명령을 받으면 resetAppium 의 결과과 도달할 때 까지 기대렸다가 호출되는것으로 변경됨.
+//            }//if : 시작할 때 앱 설치
+            const uint8_t * clear = (packet ? (uint8_t *)packet.bytes : NULL);
+            if( clear ) {
+                if ((int)clear[0] == 0)// packet 이 존재하며, clear == 0 인 상태 앱을 삭제 하지 않는다.
+                    return;
+            }
+            
+            // !packet 기존 아무것도 없을때, clear == 1 clear 명령을 받을 때
+            [itemInfo removeInstalledApp:NO];          // Clear 명령을 받으면 resetAppium 의 결과과 도달할 때 까지 기대렸다가 호출되는것으로 변경됨.
+
         });//info queue
     }
 }//processEndConnectionByPacket
@@ -684,6 +693,9 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             
             itemInfo.bInstalling = YES;
             [itemInfo installApplication:path];
+        }else{
+            //swccc 실패했을 경우 출력
+            [blockSelf commonResponse:NO deviceNo:argDeviceNo];
         }
     });//infoQueue
 }//__processInstallCommandByPacket
@@ -966,7 +978,6 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     DDLogDebug(@"%s", __FUNCTION__);
     
     dispatch_async(infoQueue, ^(void){
-        //mg//
         if (_bStopTask)
             return;
         
@@ -1109,13 +1120,32 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 #ifdef DEBUG
     DDLogWarn(@"%s, %d", __FUNCTION__, argDeviceNo);
 #endif
-
+    // modify by swccc  --> CPU와 메모리를 요청함
+    const uint8_t *resType = (uint8_t *)[packet subdataWithRange:NSMakeRange(0, 1)].bytes;
+    NSInteger nResType  = resType[0];
+    const uint8_t *reqType = (uint8_t *)[packet subdataWithRange:NSMakeRange(1, 1)].bytes;
+    NSInteger nReqType  = reqType[0];
+    
     dispatch_async(infoQueue, ^(void){
         ConnectionItemInfo* itemInfo = [self.mainController connectionItemInfoByDeviceNo:argDeviceNo];
         if(itemInfo == nil) {
             [self commonResponse:NO deviceNo:argDeviceNo];
         } else {
-
+            DDLogWarn(@"===========CMD_RES_START %d, %d=============", (int)nReqType, (int)nResType);
+            if (_bStopTask)
+                return;
+            
+            switch (nResType) {
+                case TYPE_CPU: {
+                    [itemInfo sendResourceMornitorCommand:CMD_CPU_ONCE autoConnect:YES];
+                }   break;
+                case TYPE_MEMORY: {
+                    [itemInfo sendResourceMornitorCommand:CMD_MEMORY_ONCE autoConnect:YES];
+                }   break;
+//                case TYPE_NETWORK: {
+//                    [itemInfo sendResourceMornitorCommand:CMD_NETWORK_ON autoConnect:YES];
+//                }   break;
+            }
         }
     });
 }
@@ -1169,7 +1199,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             // 일단.. 이렇게 해두고.. 나중에... 시간 되면.. 그때 알아봄.. 그때가 올런지...
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0f * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 NSString * bundleId = [[NSString alloc] initWithData:packet encoding:NSUTF8StringEncoding];
-                [itemInfo autoRunApp:bundleId];
+                [itemInfo autoRunApp:bundleId];                
             });
         }
     });
@@ -1212,6 +1242,32 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             [self commonResponse:YES reqCmd:CMD_UNINSTALL msg:@"" deviceNo:argDeviceNo];
         }
     });
+}
+
+/*
+ CMD_STATUS 현재 Device와 WDA간의 연결상태를 체크하기 위하여 추가
+*/
+-(void)__processStatusByPacket:(NSData *)packetData deviceNo:(int)argDeviceNo{
+    dispatch_async(infoQueue, ^(void){
+        if(_bStopTask)
+            return;
+        
+        ConnectionItemInfo* itemInfo = [self.mainController connectionItemInfoByDeviceNo:argDeviceNo];
+        if(itemInfo == nil){
+            [self commonResponse:NO reqCmd:CMD_STATUS msg:@"NO" deviceNo:argDeviceNo];
+        }else{
+            
+            BOOL bStatus = [itemInfo deviceGetStatus];
+            NSLog(@"status === %d",bStatus);
+            if(bStatus){
+                [self commonResponse:YES reqCmd:CMD_STATUS msg:@"ALIVE" deviceNo:argDeviceNo];
+            }else{
+                [self commonResponse:NO reqCmd:CMD_STATUS msg:@"DIE" deviceNo:argDeviceNo];
+            }
+
+        }
+    });
+    
 }
 
 /*
@@ -1283,7 +1339,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         }
             break;
         case CMD_INSTALL:{
-            [self __processInstallCommandByPacket:data deviceNo:argDeviceNo];             // test leehh
+            [self __processInstallCommandByPacket:data deviceNo:argDeviceNo];
         }
             break;
         case CMD_OPENURL:{
@@ -1291,11 +1347,15 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         }
             break;
         case CMD_RES_START:{
-            [self __processStartResourceMonitoringByPacket:data deviceNo:argDeviceNo];    // modify by leehh
+            [self __processStartResourceMonitoringByPacket:data deviceNo:argDeviceNo];
         }
             break;
         case CMD_RES_STOP:{
-            [self __processStopResourceMonitoringByPacket:data deviceNo:argDeviceNo];     // modify by leehh
+            [self __processStopResourceMonitoringByPacket:data deviceNo:argDeviceNo];    
+        }
+            break;
+        case CMD_RES_ONCE:{
+            [self __processAutoResourceByPacket:data deviceNo:argDeviceNo];
         }
             break;
         case CMD_SETTING:{
@@ -1342,10 +1402,6 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             [self __processAutoInputTextByPacket:data deviceNo:argDeviceNo];
         }
             break;
-        case CMD_RES_ONCE:{
-            [self __processAutoResourceByPacket:data deviceNo:argDeviceNo];
-        }
-            break;
         case CMD_PORTRAIT:{
             [self __processAutoOrientationByPacket:data state:NO deviceNo:argDeviceNo];
         }
@@ -1364,6 +1420,10 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             //mg//20180509//uninstall 추가
         case CMD_UNINSTALL:{
             [self __processUninstallByPacket:data deviceNo:argDeviceNo];
+        }
+            break;
+        case CMD_STATUS:{
+            [self __processStatusByPacket:data deviceNo:argDeviceNo];
         }
             break;
         default: {
@@ -1488,6 +1548,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 //        [connectedSocket writeData:packet withTimeout:-1 tag:0];
         [[self getSendTargetSocket:deviceNo] writeData:packet withTimeout:-1 tag:0];
     });
+    NSLog(@"데이터 보냄");
 }
 // ~
 
@@ -1512,7 +1573,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
      DeviceName: HoonHee's iPhone 5s
      ProductName: iPhone OS
      ProductType: iPhone7,1
-     ProductVersion: 9.3.4
+     ProductVersion: 9.3.4 
      */
     
     NSData * dtPlatform = [deviceInfo.productName dataUsingEncoding:NSUTF8StringEncoding];

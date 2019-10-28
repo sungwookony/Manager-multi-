@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="14460.31" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="14490.70" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="14460.31"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="14490.70"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
@@ -14,7 +14,6 @@
                 <outlet property="cmbLog" destination="fpD-nb-KcZ" id="woi-a6-hgg"/>
                 <outlet property="managerField" destination="bn6-dP-1l2" id="ZCK-if-WZg"/>
                 <outlet property="scrAppLog" destination="AqL-A7-5Cr" id="uB2-PS-EvP"/>
-                <outlet property="selfView" destination="Hz6-mo-xeY" id="C09-Pc-Hqs"/>
                 <outlet property="statusField" destination="ERB-lu-ynL" id="DzR-bC-3pj"/>
                 <outlet property="tbView" destination="0w0-Sd-WIe" id="7YU-d0-Kwe"/>
                 <outlet property="tfAppLog" destination="SrA-uA-2Sf" id="lDW-88-vlh"/>
@@ -52,11 +51,11 @@
                     <rect key="frame" x="163" y="507" width="720" height="114"/>
                     <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES"/>
                     <view key="contentView" id="nwg-oU-a1V">
-                        <rect key="frame" x="1" y="1" width="718" height="98"/>
+                        <rect key="frame" x="3" y="3" width="714" height="96"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="JLF-EU-iDF">
-                                <rect key="frame" x="28" y="74" width="47" height="17"/>
+                                <rect key="frame" x="28" y="72" width="47" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="UDID:" id="god-ct-2qJ">
                                     <font key="font" metaFont="system"/>
@@ -65,7 +64,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="HBh-w6-gIo">
-                                <rect key="frame" x="23" y="54" width="47" height="17"/>
+                                <rect key="frame" x="23" y="52" width="47" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="NAME:" id="Io9-6d-ec6">
                                     <font key="font" metaFont="system"/>
@@ -74,7 +73,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="9l1-mW-4iD">
-                                <rect key="frame" x="6" y="33" width="64" height="17"/>
+                                <rect key="frame" x="6" y="31" width="64" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="VERSION:" id="1M2-d7-9lY">
                                     <font key="font" metaFont="system"/>
@@ -83,7 +82,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="Fxa-TH-gzm">
-                                <rect key="frame" x="28" y="13" width="47" height="17"/>
+                                <rect key="frame" x="28" y="11" width="47" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="PORT:" id="QbV-cO-2tA">
                                     <font key="font" metaFont="system"/>
@@ -92,7 +91,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="P7M-6Y-avC">
-                                <rect key="frame" x="79" y="74" width="621" height="17"/>
+                                <rect key="frame" x="79" y="72" width="621" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Label" id="viQ-Bz-rnh">
                                     <font key="font" metaFont="system"/>
@@ -101,7 +100,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="nFp-Gb-jFp">
-                                <rect key="frame" x="79" y="54" width="257" height="17"/>
+                                <rect key="frame" x="79" y="52" width="257" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Label" id="hMy-Am-nW3">
                                     <font key="font" metaFont="system"/>
@@ -110,7 +109,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="0LD-PS-D2v">
-                                <rect key="frame" x="79" y="33" width="257" height="17"/>
+                                <rect key="frame" x="79" y="31" width="257" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Label" id="KdF-PS-erd">
                                     <font key="font" metaFont="system"/>
@@ -119,7 +118,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="B8b-k5-4JT">
-                                <rect key="frame" x="79" y="13" width="154" height="17"/>
+                                <rect key="frame" x="79" y="11" width="154" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Label" id="L3N-xm-7sD">
                                     <font key="font" metaFont="system"/>
@@ -128,7 +127,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="Evy-Ki-g2B">
-                                <rect key="frame" x="237" y="13" width="46" height="17"/>
+                                <rect key="frame" x="237" y="11" width="46" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="RATIO:" id="uOi-mF-f6Q">
                                     <font key="font" metaFont="system"/>
@@ -137,7 +136,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="bEQ-Ai-RLs">
-                                <rect key="frame" x="287" y="13" width="134" height="17"/>
+                                <rect key="frame" x="287" y="11" width="134" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Label" id="eXe-OC-ngM">
                                     <font key="font" metaFont="system"/>
@@ -146,7 +145,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="GcS-mH-Sin">
-                                <rect key="frame" x="470" y="13" width="51" height="17"/>
+                                <rect key="frame" x="470" y="11" width="51" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="PROXY:" id="t1O-11-Zb2">
                                     <font key="font" metaFont="system"/>
@@ -155,7 +154,7 @@
                                 </textFieldCell>
                             </textField>
                             <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" allowsCharacterPickerTouchBarItem="YES" id="Z2q-Wx-LkG">
-                                <rect key="frame" x="520" y="13" width="134" height="17"/>
+                                <rect key="frame" x="520" y="11" width="134" height="17"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                                 <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="Label" id="adY-rk-mds">
                                     <font key="font" metaFont="system"/>
@@ -298,7 +297,7 @@
                             </tableView>
                         </subviews>
                     </clipView>
-                    <scroller key="horizontalScroller" verticalHuggingPriority="750" controlSize="small" horizontal="YES" id="kTo-3G-LPj">
+                    <scroller key="horizontalScroller" wantsLayer="YES" verticalHuggingPriority="750" controlSize="small" horizontal="YES" id="kTo-3G-LPj">
                         <rect key="frame" x="2" y="198" width="856" height="14"/>
                         <autoresizingMask key="autoresizingMask"/>
                         <shadow key="shadow">
@@ -369,11 +368,11 @@
                         </subviews>
                         <color key="backgroundColor" red="0.0" green="0.0" blue="0.0" alpha="1" colorSpace="calibratedRGB"/>
                     </clipView>
-                    <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="IFD-i2-n0a">
+                    <scroller key="horizontalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="IFD-i2-n0a">
                         <rect key="frame" x="1" y="444" width="858" height="16"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </scroller>
-                    <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="o0W-iA-E56">
+                    <scroller key="verticalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="NO" id="o0W-iA-E56">
                         <rect key="frame" x="843" y="1" width="16" height="459"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </scroller>
@@ -406,11 +405,11 @@
                         </subviews>
                         <color key="backgroundColor" red="0.0" green="0.0" blue="0.0" alpha="1" colorSpace="calibratedRGB"/>
                     </clipView>
-                    <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="QiP-x8-Eju">
+                    <scroller key="horizontalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="QiP-x8-Eju">
                         <rect key="frame" x="1" y="444" width="858" height="16"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </scroller>
-                    <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="rb7-c2-wCg">
+                    <scroller key="verticalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="NO" id="rb7-c2-wCg">
                         <rect key="frame" x="843" y="1" width="16" height="459"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </scroller>
@@ -493,19 +492,19 @@
                         </subviews>
                         <color key="backgroundColor" red="0.0" green="0.0" blue="0.0" alpha="1" colorSpace="calibratedRGB"/>
                     </clipView>
-                    <scroller key="horizontalScroller" verticalHuggingPriority="750" horizontal="YES" id="d1E-at-vOM">
+                    <scroller key="horizontalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="d1E-at-vOM">
                         <rect key="frame" x="1" y="444" width="858" height="16"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </scroller>
-                    <scroller key="verticalScroller" verticalHuggingPriority="750" horizontal="NO" id="WfI-fp-vMR">
+                    <scroller key="verticalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="NO" id="WfI-fp-vMR">
                         <rect key="frame" x="843" y="1" width="16" height="459"/>
                         <autoresizingMask key="autoresizingMask"/>
                     </scroller>
                 </scrollView>
-                <button hidden="YES" verticalHuggingPriority="750" id="a8n-cl-vvL">
+                <button verticalHuggingPriority="750" id="a8n-cl-vvL">
                     <rect key="frame" x="14" y="560" width="150" height="32"/>
                     <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
-                    <buttonCell key="cell" type="push" title="Connect" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="5Vo-8j-BdG">
+                    <buttonCell key="cell" type="push" title="Device Restart" bezelStyle="rounded" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="5Vo-8j-BdG">
                         <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                         <font key="font" metaFont="system"/>
                     </buttonCell>

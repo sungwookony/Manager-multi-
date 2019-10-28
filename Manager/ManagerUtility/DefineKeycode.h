@@ -40,7 +40,7 @@
 #define CMD_CLEAR       13
 #define CMD_INPUT_TEXT  4
 #define CMD_LOCK_UNLOCK 24
-#define CMD_UNINSTALL   30//mg//20180509//app 삭제
+#define CMD_UNINSTALL   30
 
 #define CMD_REQ_APPLIST 306
 #define CMD_REQ_DUMP    305
@@ -49,6 +49,10 @@
 #define CMD_AUTO_SEARCH 304
 #define CMD_AUTO_RUNAPP 316
 
+
+////////////////////////////////
+#define CMD_STATUS      334
+////////////////////////////////
 #define CMD_SND_DEVICE_CHANGE   403
 
 
@@ -64,6 +68,11 @@
 #define CMD_RES_NETWORK     16
 #define CMD_RES_CPU         17
 #define CMD_RES_MEMORY      18
+
+#define CMD_AUTO_NETWORK     26
+#define CMD_AUTO_CPU         27
+#define CMD_AUTO_MEMORY      28
+
 #define CMD_SEND_APPLIST    311
 
 #define CMD_WHO_ARE_YOU         @"WhoAreYou"
@@ -73,6 +82,8 @@
 #define CMD_MEMORY_OFF          @"CMD_MEMORY_OFF "      // 끝에 공백문자가 한개 있어야 함.
 #define CMD_NETWORK_ON          @"CMD_NETWORK_ON "      // 끝에 공백문자가 한개 있어야 함.
 #define CMD_NETWORK_OFF         @"CMD_NETWORK_OFF "     // 끝에 공백문자가 한개 있어야 함.
+#define CMD_CPU_ONCE            @"CMD_CPU_ONCE "     // 끝에 공백문자가 한개 있어야 함.
+#define CMD_MEMORY_ONCE         @"CMD_MEMORY_ONCE "     // 끝에 공백문자가 한개 있어야 함.
 #define CMD_CLOSE_APP           @"CMD_CLOSE_APP"        // App 이 종료되는 명령을 전달.
 #define CMD_SAFARI              @"CMD_SAFARI"
 #define CMD_RESET               @"CMD_RESET"
@@ -91,7 +102,9 @@ typedef NS_ENUM(NSInteger, CONNECT_TYPE) {
 typedef NS_ENUM(NSInteger, RESOURCE_TYPE) {
     TYPE_NETWORK = 1,
     TYPE_CPU =2,
-    TYPE_MEMORY =3
+    TYPE_MEMORY =3,
+    TYPE_CPU_ONCE = 4,
+    TYPE_MEMORY_ONCE = 5
 };
 
 

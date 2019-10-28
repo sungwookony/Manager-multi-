@@ -34,8 +34,10 @@
             __block NSTask * installTaks = [[NSTask alloc] init];
             installTaks.environment = [NSDictionary dictionaryWithObjectsAndKeys:@"/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin", @"PATH", nil];
             [installTaks setLaunchPath: @"/usr/local/bin/ideviceinstaller"];
-            [installTaks setArguments: @[@"-i", appPath, @"-u", udid]];
+//            [installTaks setArguments: @[@"-i", appPath, @"-u", udid]];
             
+            NSLog(@"### UDID = %@ ####",udid);
+            [installTaks setArguments: @[@"-i", appPath]];
             
             NSPipe *pipe= [NSPipe pipe];
             [installTaks setStandardOutput: pipe];
@@ -69,11 +71,13 @@
             DDLogWarn(@"Error Output : %@", errorOutput);
             errorOutput = [errorOutput stringByReplacingOccurrencesOfString:@"\r" withString:@""];
             NSArray* arrErrorOut = [errorOutput componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
-            
+            NSLog(@"arrErrorOut count : %d", (int)arrErrorOut.count);
             if( arrErrorOut.count != 0 ) {
                 for(NSString* tmp in arrErrorOut) {
                     if( 0 == tmp.length )
                         continue;
+                    
+                    NSLog(@"tmp = %@",tmp);
                     
                     if( [[tmp lowercaseString] hasPrefix:@"error:"] ) {
                         // 어플 설치 오류 발생.
@@ -105,7 +109,7 @@
             
             [installTaks terminate];
             
-            if (output == nil || [output isEqualToString:@""] || [output isEqual:[NSNull null]]) {
+            if (output == nil || [output isEqualToString:@""] || [output isEqual:[NSNull null]] || [output hasPrefix:@"ERROR:"]) {
                 DDLogError(@"install fail");
 //                self.installPath = nil;
 //                [[CommunicatorWithDC sharedDCInterface] commonResponseForInstall:NO appId:@"설치 실패" deviceNo:_deviceInfos.deviceNo];
@@ -130,8 +134,8 @@
                     }
                     
                     
-                    if( [tmp containsString:@" error occurred:"]){
-                        
+//                    if( [tmp containsString:@" error occurred:"]){
+                    if( [tmp containsString:@"error"]){
                         // 어플 설치 오류 발생.
                         DDLogError(@"out error %@", tmp0);
                         NSString* result = [[tmp componentsSeparatedByString:@"- error occurred:"] lastObject];

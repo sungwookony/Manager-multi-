@@ -5767,9 +5767,7 @@ enum GCDAsyncSocketConfig
 - (void)writeData:(NSData *)data withTimeout:(NSTimeInterval)timeout tag:(long)tag
 {
 	if ([data length] == 0) return;
-	
-    DDLogDebug(@"%s : %d bytes", __FUNCTION__, [data length]);
-    
+	    
 	GCDAsyncWritePacket *packet = [[GCDAsyncWritePacket alloc] initWithData:data timeout:timeout tag:tag];
 	
 	dispatch_async(socketQueue, ^{ @autoreleasepool {

@@ -115,6 +115,7 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 
 //==== 무브
 - (void)doTapAtX:(float)argX andY:(float)argY;
+- (void)doTapAtX2:(float)argX andY:(float)argY;
 - (void)doSwipeAtX1:(int)argX1 andY1:(int)argY1 andX2:(int)argX2 andY2:(int)argY2;
 
 //==== 하드키
@@ -148,6 +149,14 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 
 - (NSString *)safariAddressElemSessionId:(NSString *)url;
 - (void)openURL:(NSString *)url;
+
+
+- (BOOL)getStatus;
+
+//Safari 초기화 테스트
+- (void)clearSafari;
+
+
 
 @end
 

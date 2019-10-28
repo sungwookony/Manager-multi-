@@ -390,7 +390,7 @@
         else
             return NO;
     }
-    
+    NSLog(@"####### cmd = (%@) ##########",cmd);
     [_connectSocket writeData:dataCmd withTimeout:-1 tag:0];
     return YES;
 }
@@ -398,8 +398,8 @@
 /// @brief      소켓에서 읽어들은 데이터를 처리함.
 - (void)processReceivedData:(NSData *)data withTag:(long)tag {
     DDLogDebug(@"%s", __FUNCTION__);
-    DDLogDebug(@"rx %d", data.length);
-    
+    DDLogDebug(@"rx %d", (int)data.length);
+    NSLog(@"data = %@",data);
     NSString * uploadedPacket = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
     DDLogVerbose(@"packet = %@ and data size = %d",uploadedPacket,(int)data.length);
     NSArray * content = [uploadedPacket componentsSeparatedByString:@":"];

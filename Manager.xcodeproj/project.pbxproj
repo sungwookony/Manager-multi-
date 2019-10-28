@@ -69,6 +69,8 @@
 		CEAFBCE51B40C43100F12425 /* GCDAsyncSocket.m in Sources */ = {isa = PBXBuildFile; fileRef = CEAFBCE41B40C43100F12425 /* GCDAsyncSocket.m */; };
 		CEAFBCE81B40CFEE00F12425 /* CommunicatorWithDC.m in Sources */ = {isa = PBXBuildFile; fileRef = CEAFBCE71B40CFEE00F12425 /* CommunicatorWithDC.m */; };
 		CEAFBEFD1B423A6700B9872C /* ConnectionItemInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = CEAFBEFC1B423A6700B9872C /* ConnectionItemInfo.m */; };
+		F91443912214E8B7003C1A75 /* Sentry.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F91443902214E8B6003C1A75 /* Sentry.framework */; };
+		F91443922214E8B7003C1A75 /* Sentry.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F91443902214E8B6003C1A75 /* Sentry.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -79,6 +81,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				507971C81E14CF5700506826 /* CoreFoundation.framework in Embed Frameworks */,
+				F91443922214E8B7003C1A75 /* Sentry.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -214,6 +217,7 @@
 		CEAFBCEA1B40F2D000F12425 /* DefineKeycode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DefineKeycode.h; sourceTree = "<group>"; };
 		CEAFBEFB1B423A6700B9872C /* ConnectionItemInfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ConnectionItemInfo.h; sourceTree = "<group>"; };
 		CEAFBEFC1B423A6700B9872C /* ConnectionItemInfo.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ConnectionItemInfo.m; sourceTree = "<group>"; };
+		F91443902214E8B6003C1A75 /* Sentry.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Sentry.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -222,6 +226,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				508A36CB1F4D7F6B00CF0B35 /* CoreMedia.framework in Frameworks */,
+				F91443912214E8B7003C1A75 /* Sentry.framework in Frameworks */,
 				508A36CC1F4D7F6B00CF0B35 /* CoreMediaIO.framework in Frameworks */,
 				507971C71E14CF5700506826 /* CoreFoundation.framework in Frameworks */,
 			);
@@ -233,6 +238,7 @@
 		3D8C810D1B37C92C00E1824A = {
 			isa = PBXGroup;
 			children = (
+				F91443902214E8B6003C1A75 /* Sentry.framework */,
 				3D8C81181B37C92D00E1824A /* Manager */,
 				CEAFBCE21B40C28700F12425 /* Frameworks */,
 				3D8C81171B37C92D00E1824A /* Products */,
@@ -517,6 +523,7 @@
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				English,
 				en,
 				Base,
 			);
@@ -729,6 +736,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
+				MARKETING_VERSION = 2.5.2;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.onycom.Manager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -760,6 +768,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
+				MARKETING_VERSION = 2.5.2;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = com.onycom.Manager;
 				PRODUCT_NAME = "$(TARGET_NAME)";

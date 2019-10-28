@@ -76,6 +76,9 @@
 
 - (void) lockSetting:(NSData *)packet;
 
+//==== 연결상태 확인
+- (BOOL)deviceGetStatus;
+
 //===== 초기화
 - (void)removeApp:(NSString *)appId; //mg//20180509//uninstall
 - (void)removeInstalledApp:(BOOL)CMDCLEAR;
