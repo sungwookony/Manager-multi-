@@ -753,14 +753,54 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 //
 //    [array objectAtIndex:8];
 //    [[NSHTTPCookieStorage sharedHTTPCookieStorage] deleteCookie:];
-    NSHTTPCookie *cookie;
-    
-    NSHTTPCookieStorage *storage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
-    
-    for (cookie in [storage cookies]) {
-        NSLog(@"1");
-        [storage deleteCookie:cookie];
-        
+//    NSHTTPCookie *cookie;
+//
+//    NSHTTPCookieStorage *storage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
+//
+//    for (cookie in [storage cookies]) {
+//        NSLog(@"1");
+//        [storage deleteCookie:cookie];
+//
+//    }
+    NSString * output = [Utility launchTaskFromBash:[NSString stringWithFormat:@"ps -ef | grep %@", @"lsof"]];
+    NSLog(@"output = %@",output);
+    if(output.length > 0){
+        output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+        NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+
+        NSMutableArray * arrPid = [NSMutableArray array];
+        for( NSString * outputProcessInfos in arrOut ) {
+            if( 0 == outputProcessInfos.length )
+                continue;
+            
+            if( [outputProcessInfos containsString:@"grep "] ) {
+                continue;
+            }
+           
+            NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
+            NSLog(@"compoment = %@",component);
+            
+            NSMutableArray* tempArray = [NSMutableArray array];
+            for(NSString* temp in component){
+                if(temp.length > 0){
+                    [tempArray addObject:temp];
+                }else{
+                }
+            }
+            NSLog(@"tempArray = %@",tempArray);
+            
+            if((int)tempArray.count > 3){
+                NSString* strPid = [tempArray objectAtIndex:2];
+                NSLog(@"strPid = %@",strPid);
+                if([strPid isEqualToString:@"1"]){
+                    strPid = [tempArray objectAtIndex:1];
+                }
+                NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPid];
+                int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
+                DDLogWarn(@"Kill Process Result : %d", result);
+
+            }
+        }
     }
 }
 

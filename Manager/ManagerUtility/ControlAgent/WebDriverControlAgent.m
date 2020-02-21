@@ -110,7 +110,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 /// @brief WDA 와 통신은 HTTP 프로토콜을 사용한다.
 - (NSDictionary *)syncRequest:(NSDictionary *)requestData {
     DDLogDebug(@"%s", __FUNCTION__);
-    
+
     if( !requestData )
         return nil;
     
@@ -138,8 +138,8 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     
     /// @code http header 정보 구성
     NSURL * url = [NSURL URLWithString:strURL];
-    //NSMutableURLRequest * httpRequest = [[NSMutableURLRequest alloc] initWithURL:url];
-    NSMutableURLRequest * httpRequest = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:(NSTimeInterval)timeout];
+    NSMutableURLRequest * httpRequest = [[NSMutableURLRequest alloc] initWithURL:url];
+//    NSMutableURLRequest * httpRequest = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:(NSTimeInterval)timeout];
     httpRequest.HTTPMethod = method;
     
     if( dicData ) {
@@ -151,6 +151,56 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     
     [httpRequest setValue:@"application/json;charset=UTF-8" forHTTPHeaderField:@"Content-Type"];
     [httpRequest setValue:@"application/json" forHTTPHeaderField:@"accept"];
+    __block dispatch_semaphore_t syncSem = dispatch_semaphore_create(0);
+    __block NSError * asyncError = nil;
+    __block NSData * responsedData = nil;
+    void (^completionHandler)(NSData * __nullable responseData, NSURLResponse * __nullable response, NSError * __nullable sessionError);
+    completionHandler = ^(NSData * __nullable responseData, NSURLResponse * __nullable response, NSError * __nullable sessionError)
+    {
+      //        DDLogInfo(@"########## %d ##########",(int)[(NSHTTPURLResponse*)response statusCode]);
+      if( [sessionError code] ) {
+          asyncError = sessionError;
+          //            DDLogInfo(@"다운로드 실패 (portNum : %d) -- %@", nPort, asyncError);
+          if( syncSem )
+              dispatch_semaphore_signal(syncSem);
+          return ;
+      }
+      
+      NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse*)response;
+      int nResponseCode =  (int)[httpResponse statusCode];
+      if (nResponseCode != 200 && nResponseCode != 303)
+      {
+          //            DDLogInfo(@"다운로드 실패 (portNum : %d) errorcode : %d", nPort, nResponseCode );
+          if( syncSem )
+              dispatch_semaphore_signal(syncSem);
+          return ;
+      }
+      
+      responsedData = responseData;
+      if( syncSem )
+          dispatch_semaphore_signal(syncSem);
+    };
+    @autoreleasepool {
+        [[[NSURLSession sharedSession] dataTaskWithRequest:httpRequest completionHandler:completionHandler] resume];
+        dispatch_semaphore_wait(syncSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC)));
+    }    
+
+    syncSem = nil;
+    NSDictionary *json = nil;
+    if( responsedData ) {
+      json = [NSJSONSerialization JSONObjectWithData:responsedData
+                                             options:NSJSONReadingMutableContainers & NSJSONReadingMutableLeaves
+                                               error:&error];
+      if ([error code] != 0) {
+          DDLogDebug(@"result failed with error = %@", error);
+          return nil;
+      }
+    }
+    
+    
+    
+    return json;
+    
     /// @endcode
     
 /*
@@ -199,31 +249,31 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 */
 
     /// @code 동기적으로 통신을 한뒤 결과데이터를 NSDictionary 로 변화시킨다.
-    NSURLResponse *response;
-    NSData *urlData = [NSURLConnection sendSynchronousRequest:httpRequest
-                                            returningResponse:&response
-                                                        error:&error];
-    
-    if ([error code] != 0) {
-        DDLogDebug(@"request failed with error = %@", error);
-        return nil;
-    }
-    
-    NSDictionary * json = nil;
-    if( urlData ) {
-        json = [NSJSONSerialization JSONObjectWithData:urlData
-                                                             options: NSJSONReadingMutableContainers & NSJSONReadingMutableLeaves
-                                                               error: &error];
-        if ([error code] != 0) {
-            DDLogDebug(@"result failed with error = %@", error);
-            return nil;
-        }
-    } else {
-        DDLogDebug(@"결과 없음.!!");
-    }
+//    NSURLResponse *response;
+//    NSData *urlData = [NSURLConnection sendSynchronousRequest:httpRequest
+//                                            returningResponse:&response
+//                                                        error:&error];
+//
+//
+//    if ([error code] != 0) {
+//        DDLogDebug(@"request failed with error = %@", error);
+//        return nil;
+//    }
+//
+//    NSDictionary * json = nil;
+//    if( urlData ) {
+//        json = [NSJSONSerialization JSONObjectWithData:urlData
+//                                                             options: NSJSONReadingMutableContainers & NSJSONReadingMutableLeaves
+//                                                               error: &error];
+//        if ([error code] != 0) {
+//            DDLogDebug(@"result failed with error = %@", error);
+//            return nil;
+//        }
+//    } else {
+//        DDLogDebug(@"결과 없음.!!");
+//    }
     /// @endcode
-    
-    return json;
+
 }
 
 /// @brief syncRequest 랑 동일한데.. 스냅샷은 Polling 방식으로 사용하는거라 주기적으로 가져와야 함.. 근데 명령과 polling을 분리해둠.
@@ -414,18 +464,30 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     
     /// @code   WDA 를 미리 빌드 해놓고, 빌드한 결과물을 가지고 실행한다. (test-without-building 옵션) 이렇게 하지 않고 멀티 제어를 하게 되면 실행이 안되는 디바이스들이 있었음. $HOME/OnycomManager/Manual/Prebuild4WDA.js 파일에 WDA 빌드하여 XCTRun 파일을 생성하는 명령이 있으며, 반드시 이 스크립트로 빌드를 해놔야 하며, XCTRun 정보를 AgentInfo.txt 파일에 넣어줘야 함.
     // xcodebuild 로 build-for-testing 의 옵션을 사용하여 빌드한뒤 생성된
+
     DDLogDebug(@"%@",[Utility managerDirectory]);
     DDLogDebug(@"%@",_xctestRun);
     
 //    _myWDATask = [[NSTask alloc] init];
 //    _myWDATask.launchPath = @"usr/bin/xcodebuild";
 //    _myWDATask.arguments = @[@"test-without-building", @"-xctestrun", [NSString stringWithFormat:@"%@/PreBuild4WDA/%@/Build/Products/%@",
-//                                                                       [Utility managerDirectory], self.deviceInfos.udid, _xctestRun], @"-destination", [NSString stringWithFormat:@"id=%@", self.deviceInfos.udid]];
+//  [Utility managerDirectory], self.deviceInfos.udid, _xctestRun], @"-destination", [NSString stringWithFormat:@"id=%@", self.deviceInfos.udid]];
     
     
     NSString * commandString = [NSString stringWithFormat:@"xcodebuild test-without-building -xctestrun %@/PreBuild4WDA/%@/Build/Products/%@ -destination id=%@", [Utility managerDirectory], self.deviceInfos.udid, _xctestRun, self.deviceInfos.udid];
     // @endcode
     DDLogVerbose(@"start command = %@",commandString);
+    
+    if(_myWDATask){
+        if(_myWDATask.isRunning)
+            [_myWDATask terminate];
+        _myWDATask = nil;
+    }
+    
+    if(_myWDAHandler){
+        _myWDAHandler = nil;
+    }
+    
     
     _myWDATask = [[NSTask alloc] init];
     _myWDATask.launchPath = @"/bin/bash";
@@ -440,27 +502,84 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     launchBundleId = @"HomeScreen";
     _launchCount = 0;    
     
+    
+    
+//    NSPipe * outputPipe = [[NSPipe alloc] init];
+//    [_myWDATask setStandardOutput:outputPipe];
+    
+    __block NSError* error = nil;
+    __block BOOL bLaunch = YES;
     if( [NSThread isMainThread] ) {
         //예외 일괄처리
-        [_myWDATask launch];
+        if (@available(macOS 10.13, *)) {
+            bLaunch = [_myWDATask launchAndReturnError:&error];
+        } else {
+            [_myWDATask launch];
+        }
     } else {
         dispatch_async(dispatch_get_main_queue(), ^{
             //예외 일괄처리
-            [_myWDATask launch];
+            if (@available(macOS 10.13, *)) {
+                bLaunch = [_myWDATask launchAndReturnError:&error];
+            } else {
+                [_myWDATask launch];
+            }
         });
     }
-    
+        
+   if(error){
+        DDLogError(@"LAUNCH ERROR = %@",error.description);
+        if( [customDelegate respondsToSelector:@selector(agentCtrlLaunchFailed)] ) {
+            [customDelegate agentCtrlLaunchFailed];
+        }
+    }else{
+        DDLogDebug(@"LAUNCH SUCCESS = %d",bLaunch);
+        
+        NSLog(@"Timer Start");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSLog(@"Timer ");
+            launchTime = nil;
+            [_launchTimer invalidate];
+            _launchTimer = nil;
+            
+            launchTime = [NSDate date];
+            _launchTimer = [NSTimer timerWithTimeInterval:1.0f target:self selector:@selector(onCheckLaunchedTimer:) userInfo:nil repeats:YES];
+            NSRunLoop * curRunloop = [NSRunLoop currentRunLoop];
+            [curRunloop addTimer:_launchTimer forMode:NSDefaultRunLoopMode];
+        });
+    }
+            
+    //        if(bLaunch){
+    //            NSLog(@"Timer Start");
+    //            dispatch_async(dispatch_get_main_queue(), ^{
+    //                NSLog(@"Timer ");
+    //                launchTime = nil;
+    //                [_launchTimer invalidate];
+    //                _launchTimer = nil;
+    //
+    //                launchTime = [NSDate date];
+    //                _launchTimer = [NSTimer timerWithTimeInterval:1.0f target:self selector:@selector(onCheckLaunchedTimer:) userInfo:nil repeats:YES];
+    //                NSRunLoop * curRunloop = [NSRunLoop currentRunLoop];
+    //                [curRunloop addTimer:_launchTimer forMode:NSDefaultRunLoopMode];
+    //            });
+    //        }else{
+    //            NSLog(@"LAUNCH FAILED");
+    //            if( [customDelegate respondsToSelector:@selector(agentCtrlLaunchFailed)] ) {
+    //                [customDelegate agentCtrlLaunchFailed];
+    //            }
+    //        }
+//        }
     //dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0), ^{
       //  [_myWDATask launch];
     //});
     
-    launchTime = [NSDate date];
-    
-    dispatch_async(dispatch_get_main_queue(), ^{
-        _launchTimer = [NSTimer timerWithTimeInterval:1.0f target:self selector:@selector(onCheckLaunchedTimer:) userInfo:nil repeats:YES];
-        NSRunLoop * curRunloop = [NSRunLoop currentRunLoop];
-        [curRunloop addTimer:_launchTimer forMode:NSDefaultRunLoopMode];
-    });
+//    launchTime = [NSDate date];
+//
+//    dispatch_async(dispatch_get_main_queue(), ^{
+//        _launchTimer = [NSTimer timerWithTimeInterval:1.0f target:self selector:@selector(onCheckLaunchedTimer:) userInfo:nil repeats:YES];
+//        NSRunLoop * curRunloop = [NSRunLoop currentRunLoop];
+//        [curRunloop addTimer:_launchTimer forMode:NSDefaultRunLoopMode];
+//    });
 
     //onCheckLaunchedTimer 호출이 늦어지고 연결 실패가 되는 경우가 발생함.
     //연결 일괄 처리
@@ -546,62 +665,104 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 /// @brief  WDA 와 통신을 하기 위한 iproxy 를 실행한다.
 - (void) startIProxy {          // WebDriverAgent 와 통신을 하기 위한 iProxy 를 실행시킨다.
     // _portNum 으로 실행중인 iproxy 를 강제 종료시킨다. (확인)
-    [Utility killListenPort:_portNum exceptPid:getpid()];
-    
-    NSString * commandString = [NSString stringWithFormat:@"iproxy %d %d %@", _portNum, _portNum, deviceInfos.udid];
-    
-    _myIProxyTask = [[NSTask alloc] init];
-    _myIProxyTask.launchPath = @"/bin/bash";
-    _myIProxyTask.arguments = @[@"-l", @"-c", commandString];
-    
-    _myIProxyHandler = [[PipeHandler alloc] initWithDelegate:self];
-    _myIproxyErrorHandler = [[PipeHandler alloc] initWithDelegate:self];
-    [_myIProxyHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_OUTPUT];
-    [_myIproxyErrorHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_ERROR];
-    
-    //mg//
-    /*
-     dispatch_async(dispatch_get_main_queue(), ^{
-        [_myIProxyTask launch];
-    });
-     */
-    
-    //mg//s
-    if( [NSThread isMainThread] ) {
-        //예외 일괄처리
-        [_myIProxyTask launch];
-    } else {
+    @try{
+        [Utility killListenPort:_portNum exceptPid:getpid()];
+    }@catch(NSException* ex){
+        NSLog(@"kill iproxy Error = %@",ex.description);
+    }
+        
+    @try{
+       NSString * commandString = [NSString stringWithFormat:@"iproxy %d %d %@", _portNum, _portNum, deviceInfos.udid];
+       
+        if(_myIProxyTask){
+            @try{
+                [_myIProxyTask terminate];
+            }@catch(NSException *ex){
+                NSLog(@"terminate error = %@",ex.description);
+            }
+            _myIProxyTask = nil;
+        }
+        
+        if(_myIProxyHandler){
+            _myIProxyHandler = nil;
+        }
+        
+        
+       _myIProxyTask = [[NSTask alloc] init];
+       _myIProxyTask.launchPath = @"/bin/bash";
+       _myIProxyTask.arguments = @[@"-l", @"-c", commandString];
+       
+       _myIProxyHandler = [[PipeHandler alloc] initWithDelegate:self];
+       _myIproxyErrorHandler = [[PipeHandler alloc] initWithDelegate:self];
+       [_myIProxyHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_OUTPUT];
+       [_myIproxyErrorHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_ERROR];
+       
+       //mg//
+       /*
         dispatch_async(dispatch_get_main_queue(), ^{
-            //예외 일괄처리
-            [_myIProxyTask launch];
-        });
-    }//mg//e
+           [_myIProxyTask launch];
+       });
+        */
+       
+       
+        __block NSError* error = nil;
+        __block BOOL bTask = YES;
+       if( [NSThread isMainThread] ) {
+           //예외 일괄처리
+           if (@available(macOS 10.13, *)) {
+               bTask = [_myIProxyTask launchAndReturnError:&error];
+           } else {
+               [_myIProxyTask launch];
+           }
+       } else {
+           dispatch_async(dispatch_get_main_queue(), ^{
+               //예외 일괄처리
+               if (@available(macOS 10.13, *)) {
+                   bTask = [_myIProxyTask launchAndReturnError:&error];
+               } else {
+                   [_myIProxyTask launch];
+               }
+            });
+       }
+        NSLog(@"######## IPROXY START %d ########",bTask);
+        [self launchControlAgent];
+    } @catch (NSException *exception) {
+        DDLogError(@"%@",exception.description);
+    }
 }//startIProxy
 
 /// @brief  iproxy 를 종료한다.
 - (void) stopIProxy {
-    if( _myIProxyTask.isRunning) {
-        __block dispatch_semaphore_t terminationSem = dispatch_semaphore_create(0);
-        _myIProxyTask.terminationHandler = ^(NSTask * task) {
-            if( terminationSem ) {
-                dispatch_semaphore_signal(terminationSem);
+    @try {
+        if( _myIProxyTask.isRunning) {
+            @try{
+                __block dispatch_semaphore_t terminationSem = dispatch_semaphore_create(0);
+                _myIProxyTask.terminationHandler = ^(NSTask * task) {
+                    if( terminationSem ) {
+                        dispatch_semaphore_signal(terminationSem);
+                    }
+                };
+                
+                [_myIProxyTask terminate];
+                dispatch_semaphore_wait(terminationSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f * NSEC_PER_SEC)));
+                terminationSem = nil;
+                _myIProxyTask = nil;
+                
+                if( _myIProxyHandler ) {
+                    [_myIProxyHandler closeHandler];
+                    _myIProxyHandler = nil;
+                }
+                
+                if( _myIproxyErrorHandler ) {
+                    [_myIproxyErrorHandler closeHandler];
+                    _myIproxyErrorHandler = nil;
+                }
+            }@catch(NSException* ex){
+                DDLogError(@"%@",ex.description);
             }
-        };
-        
-        [_myIProxyTask terminate];
-        dispatch_semaphore_wait(terminationSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f * NSEC_PER_SEC)));
-        terminationSem = nil;
-        _myIProxyTask = nil;
-        
-        if( _myIProxyHandler ) {
-            [_myIProxyHandler closeHandler];
-            _myIProxyHandler = nil;
         }
-        
-        if( _myIproxyErrorHandler ) {
-            [_myIproxyErrorHandler closeHandler];
-            _myIproxyErrorHandler = nil;
-        }
+    } @catch (NSException *exception) {
+        DDLogError(@"%@",exception.description);
     }
 }
 
@@ -609,10 +770,11 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 - (void) shutdownWDA {
     if (!self.bLaunchDone) return;
     
-    NSDictionary * requestData = @{METHOD:@"GET", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:0.5f], CMD:@"/wda/shutdown"};
+    NSDictionary * requestData = @{METHOD:@"GET", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:3.0f], CMD:@"/wda/shutdown"};
     NSDictionary * result = [self syncRequest:requestData];
     
     DDLogDebug(@"### SHUTDOWN RESULT ### \n %@", result);
+
 }
 
 /// @brief  WDA 타스크를 종료 및 정리한다.
@@ -630,7 +792,14 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
                 dispatch_semaphore_signal(terminationSem);
         };
         
-        [_myWDATask terminate];
+        @try{
+            if(_myWDATask.isRunning)
+                [_myWDATask terminate];
+            
+        }@catch(NSException *ex){
+            NSLog(@"TASK NOT LAUNCHED");
+        }
+        
         dispatch_semaphore_wait(terminationSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f * NSEC_PER_SEC)));
         terminationSem = nil;
         _myWDATask = nil;
@@ -691,16 +860,21 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     NSFileHandle * outputHandle = [outputPipe fileHandleForReading];
     
     if( [NSThread isMainThread] ) {
-        [removeTask launch];
+        @autoreleasepool {
+            [removeTask launch];
+        }
     } else {
         dispatch_async(dispatch_get_main_queue(), ^{
-            [removeTask launch];
+            @autoreleasepool {
+                [removeTask launch];
+            }
         });
     }
     
     NSData * readData = [outputHandle readDataToEndOfFile];
     NSString * readString = [[NSString alloc] initWithData:readData encoding:NSUTF8StringEncoding];
     [outputHandle closeFile];
+    
     
     NSArray * component = [readString componentsSeparatedByString:@"\n\r"];
     NSString * lastObject = [[component lastObject] lowercaseString];
@@ -843,7 +1017,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     DDLogInfo(@"#### LAUNCH BUNDLE ID = %@", bundleID);
     
     NSArray* temp = [bundleID componentsSeparatedByString:@"|"];
-    NSString* restart = @"0";
+    NSString* restart = @"1";
     
     if(temp.count > 1){
         restart = [temp objectAtIndex:1];
@@ -855,7 +1029,11 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         DDLogInfo(@"앱 처음부터 실행");
         NSDictionary * body = @{@"desiredCapabilities":@{
                                         @"bundleId":bundleID,
+                                        @"shouldWaitForQuiescenece":@false,
+                                        @"arguments":@[],
+                                        @"environment":@{}
                                         }};
+        
         requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:120.], CMD:@"/session", BODY:body};
     }else{
         DDLogInfo(@"앱 그냥 실행 = %@",bundleID);
@@ -928,10 +1106,10 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     DDLogWarn(@"%s, %d", __FUNCTION__, self.deviceInfos.deviceNo);
     
 //    [self clearWebDriverSession:dicBundleIds];
-    //    [self shutdownWDA];    // hoonl : ios 11 버전에서 이상동작을 야기시켜 사용안함 (이전에도 null 값 떨어지던 부분)
+    [self shutdownWDA];    // hoonl : ios 11 버전에서 이상동작을 야기시켜 사용안함 (이전에도 null 값 떨어지던 부분)
     [self stopIProxy];
     [self stopWDA];
-    [self removeWDA];
+//    [self removeWDA];
     
     _launchStatus = STATUS_NONE;
     self.sessionID = nil;
@@ -1110,10 +1288,12 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         DDLogInfo(@"실패");
     }
     NSString * sessionId = [result objectForKey:@"sessionId"];
-    if( sessionId)
+    if( sessionId){
         self.sessionID = sessionId;
-    else
+    }else{
         NSLog(@"흠...");
+//        [self startIProxy];
+    }
 }
 
 - (void)doTapAtX2:(float)argX andY:(float)argY{
@@ -1170,8 +1350,10 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         NSString * sessionId = [result objectForKey:@"sessionId"];
         if( sessionId)
             self.sessionID = sessionId;
-        else
+        else{
             NSLog(@"흠....");
+//            [self startIProxy];
+        }
         nStartX = 0;
         nStartY = 0;
     } else {
@@ -1191,7 +1373,9 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     DDLogInfo(@"%s, %d",__FUNCTION__, self.deviceInfos.deviceNo);
     
     if (!self.bLaunchDone || nil == _sessionID ) return;
-    touchDate = [NSDate date];
+    if(touchDate == nil){
+       touchDate = [NSDate date];
+    }
     
     float ratio = (float)self.deviceInfos.ratio;
     nStartX = argX/ratio;
@@ -1249,14 +1433,15 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     } else {        // Drag & Drop
         NSDictionary * body = nil;
         
-        if( timeInterval < 0.5f && bAuto == NO) {     // 짧지만 빠르게 움직임.
-
+//        if( timeInterval < 0.5f && bAuto == NO) {     // 짧지만 빠르게 움직임.
+//        if( timeInterval < 0.5f) {     // 홈화면으로 전환되면서 해당 자동화 매뉴얼의 구분없애버림
+        if(timeInterval < 0.5f){
             body = @{@"fromX":[NSNumber numberWithFloat:nStartX], @"fromY":[NSNumber numberWithFloat:nStartY], @"toX":[NSNumber numberWithFloat:endX], @"toY":[NSNumber numberWithFloat:endY]};
             
             requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/dragSwipe", BODY:body, SESSION_ID:self.sessionID};
         } else {                        // 밀듯이 움직임.
             //mg//객체가 선택되는 사례가 있어서 duration 0.1->0
-            body = @{@"fromX":[NSNumber numberWithFloat:nStartX], @"fromY":[NSNumber numberWithFloat:nStartY], @"toX":[NSNumber numberWithFloat:endX], @"toY":[NSNumber numberWithFloat:endY], @"duration":[NSNumber numberWithFloat:(float)0.0]};
+            body = @{@"fromX":[NSNumber numberWithFloat:nStartX], @"fromY":[NSNumber numberWithFloat:nStartY], @"toX":[NSNumber numberWithFloat:endX], @"toY":[NSNumber numberWithFloat:endY], @"duration":[NSNumber numberWithFloat:(float)timeInterval]};
             
             requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/dragfromtoforduration", BODY:body, SESSION_ID:self.sessionID};
         }
@@ -1275,7 +1460,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         nStartY = 0;
         touchDate = nil;
     } else {
-        NSLog(@"실패");
+        NSLog(@"실패 Manual");
         
         DDLogError(@"Drag and Drop Error");
         if( 1001 == error.code ) {
@@ -1312,7 +1497,14 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         NSDictionary* resultKeyboard = [self syncRequest:requestKeyBoardData];
         
         DDLogInfo(@"key resulst = %@",resultKeyboard);
-        int nStatus = [[resultKeyboard objectForKey:@"status"] intValue];
+        int nStatus = 0;
+        @try {
+            NSLog(@"%d",[[resultKeyboard objectForKey:@"status"] intValue]);
+            nStatus = [[resultKeyboard objectForKey:@"status"] intValue];
+        } @catch (NSException *exception) {
+            NSLog(@"exeption = %@",exception.description);
+        }
+        
         DDLogInfo(@"nstatus = %d",nStatus);
         
         // 단일객체 검색일 경우.
@@ -1335,43 +1527,47 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
             nValueCount = (int)tempArr.count;
         }
          */
-        NSDictionary * tmpDic = [resultKeyboard objectForKey:@"value"];
-        bool bExistObject = NO;
-        if( tmpDic ) {
-//            nValueCount = (int)[tmpDic count];
-            NSString * objectUuid = [tmpDic objectForKey:@"ELEMENT"];           // 객체가 없으면.. ELEMENT 정보가 없어 nil 이 나올거임.
-            bExistObject = objectUuid ? YES : NO;
-        }
-        
-        if( bExistObject ) {
-            dispatch_sync(dispatch_get_main_queue(),^ {
-                if( nStatus == 0 ) {
-//                    NSString * decomposition = [Utility getHangulDecomposition:string];
-//                    NSDictionary * body = @{@"value":@[decomposition]};
-                    NSDictionary * body = @{@"value":@[string]};
-                    
-                    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/keys", BODY:body, SESSION_ID:self.sessionID};
-                    NSDictionary * result = [self syncRequest:requestData];
-                    DDLogInfo(@"input text = %@",result);
-                    if( result ) {
-                        DDLogInfo(@"%s success", __FUNCTION__);
+        if(nStatus == 0){
+            NSDictionary * tmpDic = [resultKeyboard objectForKey:@"value"];
+            bool bExistObject = NO;
+            if( tmpDic ) {
+    //            nValueCount = (int)[tmpDic count];
+                NSString * objectUuid = [tmpDic objectForKey:@"ELEMENT"];           // 객체가 없으면.. ELEMENT 정보가 없어 nil 이 나올거임.
+                bExistObject = objectUuid ? YES : NO;
+            }
+            
+            if( bExistObject ) {
+                dispatch_sync(dispatch_get_main_queue(),^ {
+                    if( nStatus == 0 ) {
+    //                    NSString * decomposition = [Utility getHangulDecomposition:string];
+    //                    NSDictionary * body = @{@"value":@[decomposition]};
+                        NSDictionary * body = @{@"value":@[string]};
                         
-                        [[CommunicatorWithDC sharedDCInterface] commonResponse:YES deviceNo:self.deviceInfos.deviceNo];
-                    } else {
-                        NSLog(@"실패");
-                        [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:self.deviceInfos.deviceNo];
+                        NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], CMD:@"/wda/keys", BODY:body, SESSION_ID:self.sessionID};
+                        NSDictionary * result = [self syncRequest:requestData];
+                        DDLogInfo(@"input text = %@",result);
+                        if( result ) {
+                            DDLogInfo(@"%s success", __FUNCTION__);
+                            
+                            [[CommunicatorWithDC sharedDCInterface] commonResponse:YES deviceNo:self.deviceInfos.deviceNo];
+                        } else {
+                            NSLog(@"실패");
+                            [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:self.deviceInfos.deviceNo];
+                        }
+                        
+                        NSString * sessionId = [result objectForKey:@"sessionId"];
+                        if( sessionId)
+                            self.sessionID = sessionId;
+                        else
+                            NSLog(@"흠....");
+                    }else{
+                        NSLog(@"키보드 없다 ");
+                        
                     }
-                    
-                    NSString * sessionId = [result objectForKey:@"sessionId"];
-                    if( sessionId)
-                        self.sessionID = sessionId;
-                    else
-                        NSLog(@"흠....");
-                }else{
-                    NSLog(@"키보드 없다 ");
-                    
-                }
-            });
+                });
+            }else{
+                [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:self.deviceInfos.deviceNo];
+            }
         }else{
             [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:self.deviceInfos.deviceNo];
         }
@@ -1677,6 +1873,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     NSDictionary * result = [self syncRequest:requestData];
     if( !result ) {
         DDLogError(@"none http response");
+//        [self startIProxy];
         return nil;
     }
     
@@ -1960,6 +2157,61 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     return bView;
 }
 
+-(void)likeSearch:(NSData *)data andSelect:(BOOL)bSelect{
+    DDLogDebug(@"%s", __FUNCTION__);
+
+    if(!self.bLaunchDone) {
+        [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:deviceInfos.deviceNo];
+        return;
+    }
+
+    SelectObject* obj = [self automationSearchParsing:data andSelect:bSelect];
+    NSString *elementLabel = nil;
+
+    @autoreleasepool {
+        NSDictionary* elem = nil;
+        
+        if ([obj.scrollClass caseInsensitiveCompare:@"Pattern"] == 0)
+            elem = [self getElementByPattern:obj];
+        else{
+            //swccc 20191202 CONTAIN 검색기능추가
+            elem = [self getElementByContainString:obj];
+        }
+        
+        if(elem == nil){
+            DDLogInfo(@"elem 검색 실패1");
+            elem = [self getElementByTargetInfo:obj];
+        }else{
+            DDLogInfo(@"elem 검색 성공");
+        }
+        
+        if(elem != nil){
+            BOOL bPress = YES;
+            if(bSelect)
+                bPress = [self pressElement:elem isLong:(obj.longPress==1)? YES:NO];
+            
+            if( [obj.scrollClass caseInsensitiveCompare:@"Text"] != 0) {
+                elementLabel = [self getElementAttributeName:elem attribute:@"name"];
+                DDLogInfo(@"label = %@",elementLabel);
+                
+                [[CommunicatorWithDC sharedDCInterface] sendResponse:YES message:elementLabel deviceNo:deviceInfos.deviceNo];
+                
+            }//if : class, pattern search
+            
+            else{
+                if(bPress){
+                    [[CommunicatorWithDC sharedDCInterface] commonResponse:YES deviceNo:deviceInfos.deviceNo];
+                }else{
+                    [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:deviceInfos.deviceNo];
+                }
+            }
+        }//if : succeeded
+        else{
+            [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:deviceInfos.deviceNo];
+        }
+    }//autoreleasepool
+}
+
 // @brief  DC 에서 넘겨준 객체정보로 객체를 찾는다.
 - (void)automationSearch:(NSData *)data andSelect:(BOOL)bSelect{
     DDLogDebug(@"%s", __FUNCTION__);
@@ -1979,11 +2231,15 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
             elem = [self getElementByPattern:obj];
         else{
             elem = [self getElementByTargetString:obj];
+//            elem = [self getElementByTargetInfo:obj];
+            //swccc 20191202 CONTAIN 검색기능추가
+//            elem = [self getElementByContainString:obj];
         }
         
         if(elem == nil){
-            DDLogInfo(@"elem 검색 실패");
+            DDLogInfo(@"elem 검색 실패2");
             elem = [self getElementByTargetInfo:obj];
+//            elem = [self getElementByTargetString:obj];
         }else{
             DDLogInfo(@"elem 검색 성공");
         }
@@ -2035,15 +2291,15 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 }//automationSearch
 
 
-- (NSString *) getElementAttributeName:(NSDictionary *)elem attribute:(NSString *)attribute {
-    NSDictionary* bodySwipe = @{@"duration":@2.0f};
-    NSString * strCmd = [NSString stringWithFormat:@"/element/%@/attribute/%@", [elem objectForKey:@"ELEMENT"], attribute];
-    
-//    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], BODY:bodySwipe, CMD:strCmd, SESSION_ID:self.sessionID};
+- (NSString *) getElementText:(NSDictionary *)elem{
 
+    NSString * strCmd = [NSString stringWithFormat:@"/element/%@/text", [elem objectForKey:@"ELEMENT"]];
+    
+    //    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], BODY:bodySwipe, CMD:strCmd, SESSION_ID:self.sessionID};
+    
     NSDictionary * requestData = @{METHOD:@"GET", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], SESSION_ID:_sessionID, CMD:strCmd};
     NSDictionary * result = [self syncRequest:requestData];
-
+    
     
     DDLogInfo(@"%s -- cmd : %@", __FUNCTION__, strCmd);
     
@@ -2071,6 +2327,57 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     return nil;
 }
 
+- (NSString *) getElementAttributeName:(NSDictionary *)elem attribute:(NSString *)attribute {
+    NSDictionary* bodySwipe = @{@"duration":@2.0f};
+    NSString * strCmd = [NSString stringWithFormat:@"/element/%@/attribute/%@", [elem objectForKey:@"ELEMENT"], attribute];
+    
+//    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], BODY:bodySwipe, CMD:strCmd, SESSION_ID:self.sessionID};
+
+    NSDictionary * requestData = @{METHOD:@"GET", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:TIMEOUT_COMMAND], SESSION_ID:_sessionID, CMD:strCmd};
+    NSDictionary * result = [self syncRequest:requestData];
+
+    
+    DDLogInfo(@"%s -- cmd : %@", __FUNCTION__, strCmd);
+    if(result != nil){
+        @try {
+            int nResult = [[result objectForKey:@"status"] intValue];
+            if( 0 == nResult ) {
+                DDLogInfo(@"성공");
+                NSString * sessionId = [result objectForKey:@"sessionId"];
+                if( sessionId)
+                    self.sessionID = sessionId;
+                else
+                    NSLog(@"흠....");
+                
+                
+                NSString* value = [result objectForKey:@"value"];
+                if(value != nil){
+                    return value;
+                }else{
+                    return nil;
+                }
+            } else {
+                NSLog(@"실패");
+                
+                DDLogError(@"Press Long Error");
+                if( 1001 == nResult ) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [[CommunicatorWithDC sharedDCInterface] responseDeviceDisconnected:self.deviceInfos.deviceNo];
+                    });
+                }
+                
+            }
+        } @catch (NSException *exception) {
+            DDLogError(@"%s = %@",__FUNCTION__,exception.description);
+        }
+    }else{
+        return nil;
+    }
+    
+
+    return nil;
+}
+
 /// @brief  객체에서 attribute 정보를 가져온다.
 /// @param  elem xPath 로 찾은 객체
 /// @param  attribute 검색할 Attribute
@@ -2083,26 +2390,39 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     DDLogInfo(@"%s -- cmd : %@", __FUNCTION__, strCmd);
     
     NSDictionary * result = [self syncRequest:requestData];
-    int nResult = [[result objectForKey:@"status"] intValue];
-    if( 0 == nResult ) {
-        DDLogInfo(@"성공");
-        NSString * sessionId = [result objectForKey:@"sessionId"];
-        if( sessionId)
-            self.sessionID = sessionId;
-        else
-            NSLog(@"흠....");
-        
-        return [result objectForKey:@"value"];
-    } else {
-        NSLog(@"실패");
-        
-        DDLogError(@"Press Long Error");
-        if( 1001 == nResult ) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [[CommunicatorWithDC sharedDCInterface] responseDeviceDisconnected:self.deviceInfos.deviceNo];
-            });
+    
+    if(result != nil){
+        @try{
+            int nResult = [[result objectForKey:@"status"] intValue];
+            if( 0 == nResult ) {
+                DDLogInfo(@"성공");
+                NSString * sessionId = [result objectForKey:@"sessionId"];
+                if( sessionId)
+                    self.sessionID = sessionId;
+                else
+                    NSLog(@"흠....");
+                
+                NSString* value = [result objectForKey:@"value"];
+                if(value != nil){
+                    return value;
+                }else{
+                    return nil;
+                }
+            } else {
+                NSLog(@"실패");
+                
+                DDLogError(@"Press Long Error");
+                if( 1001 == nResult ) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [[CommunicatorWithDC sharedDCInterface] responseDeviceDisconnected:self.deviceInfos.deviceNo];
+                    });
+                }
+                
+            }
+        }@catch(NSException* ex){
+            DDLogError(@"%s = %@",__FUNCTION__,ex.description);
         }
-        
+
     }
     return nil;
 }
@@ -2503,6 +2823,91 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     if( 0 != nStatus ){
         if(nStatus == 6){
             NSString * sessionId = [result objectForKey:@"sessionId"];
+            DDLogDebug(@"session id 1  = %@",sessionId);
+            if( sessionId)
+                self.sessionID = sessionId;
+        }
+        return nil;
+    }
+    
+    //element list
+    NSArray* arrayElem = [result objectForKey:@"value"];
+    //session id
+    NSString * sessionId = [result objectForKey:@"sessionId"];
+    DDLogDebug(@"session id 2 = %@",sessionId);
+    if( sessionId){
+        self.sessionID = sessionId;
+    }else{
+//        [self startIProxy];
+    }
+    
+    NSString* error = nil;
+    @try{
+        error = [[result objectForKey:@"value"] objectForKey:@"error"];
+    }@catch(NSException* ex){
+        NSLog(@"error = %@",ex.description);
+//        return nil;
+    }
+    NSLog(@"error %@",error);
+    if (arrayElem == nil || arrayElem.count ==0 || error != nil || error.length > 0) {
+        DDLogInfo(@"none element");
+        return nil;
+    } else { // filter targetClass match
+        NSLog(@"count = %d",(int)arrayElem.count);
+        if(arrayElem.count > 0) {
+            DDLogDebug(@"%@",arrayElem);
+            DDLogDebug(@"element count = %lu", arrayElem.count);
+            DDLogDebug(@"obj instance = %d",(int)obj.instance);
+            //element count
+            if( obj.instance >= arrayElem.count ) {
+                DDLogError(@"items insufficient");
+                return nil;
+            }
+            return [arrayElem objectAtIndex:(int)obj.instance];
+        } else {
+            return [arrayElem objectAtIndex:0];
+        }//if - else : element count
+    
+    }//if - else : array
+}//getElementByTargetString
+
+// @brief link text로 WDA에 검색을 요청하여 찾는다.
+// @param obj 객체 정보 CONTAINS
+-(NSDictionary *)getElementByContainString:(SelectObject *)obj{
+    DDLogDebug(@"%s", __FUNCTION__);
+    
+    //query
+    NSMutableString* temp = [[NSMutableString alloc] init];
+    temp = [NSMutableString stringWithFormat:@"type == '%@'", obj.targetClass];
+
+    if(obj.targetName.length == 0 && obj.targetLabel.length == 0 && obj.targetValue.length ==0){
+    }else{
+        if( obj.targetName.length >0)
+            [temp appendString:[NSMutableString stringWithFormat:@" AND wdName CONTAINS '%@'", obj.targetName]];
+        else
+            [temp appendString:[NSMutableString stringWithFormat:@" AND name=null"]];
+        
+    }
+    
+    //전체 검색을 하기 위하여 해당 기능은 삭제 한다(통일성을 위하여 맞춰준다.)
+    NSDictionary * body = @{@"using":@"predicate string", @"value":temp};
+    DDLogInfo(@"search query : %@", temp);
+
+    //swccc//timeout TIMEOUT_COMMAND->60
+    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:10.0f], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
+    
+    //response
+    NSDictionary * result = [self syncRequest:requestData];
+    DDLogDebug(@"response : %@",result);
+    if (result == nil)
+        return nil;
+    
+    //status
+    int nStatus = [[result objectForKey:@"status"] intValue];
+    DDLogDebug(@"status=%d", nStatus);
+    if( 0 != nStatus ){
+        if(nStatus == 6){
+            NSString * sessionId = [result objectForKey:@"sessionId"];
             DDLogDebug(@"session id = %@",sessionId);
             if( sessionId)
                 self.sessionID = sessionId;
@@ -2516,8 +2921,12 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     //session id
     NSString * sessionId = [result objectForKey:@"sessionId"];
     DDLogDebug(@"session id = %@",sessionId);
-    if( sessionId)
+    if( sessionId){
         self.sessionID = sessionId;
+    }else{
+//        [self startIProxy];
+        return nil;
+    }
     
     if (arrayElem == nil || arrayElem.count ==0) {
         DDLogInfo(@"none element");
@@ -2574,68 +2983,86 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
     }
     
     //element list
-    NSArray* arrayElem = [result objectForKey:@"value"];
-    
-    //session id
-    NSString * sessionId = [result objectForKey:@"sessionId"];
-    DDLogDebug(@"session id = %@",sessionId);
-    if( sessionId)
-        self.sessionID = sessionId;
-    
-    if (arrayElem == nil || arrayElem.count ==0) {
-        DDLogInfo(@"none element");
-        return nil;
-    } else {
-        //"\\[.+?\\]"
-        NSRegularExpression *regex = nil;
-        NSDictionary* elem = nil;
-        NSString *txt = nil;
-        NSArray *matches = nil;
-        
-        //name pattern
-        if( obj.targetName.length >0) {
-            regex = [NSRegularExpression regularExpressionWithPattern:obj.targetName options:0 error:nil];
+    if(result != nil){
+        NSArray* arrayElem = [result objectForKey:@"value"];
+           
+           //session id
+           NSString * sessionId = [result objectForKey:@"sessionId"];
+           DDLogDebug(@"session id = %@",sessionId);
+           if( sessionId)
+               self.sessionID = sessionId;
+           
+           if (arrayElem == nil || arrayElem.count ==0) {
+               DDLogInfo(@"none element");
+               return nil;
+           } else {
+               //"\\[.+?\\]"
+               NSRegularExpression *regex = nil;
+               NSDictionary* elem = nil;
+               NSString *txt = nil;
+               NSArray *matches = nil;
+               
+               //name pattern
+               if( obj.targetName.length >0) {
+                   regex = [NSRegularExpression regularExpressionWithPattern:obj.targetName options:0 error:nil];
 
-            for (int i=0; i< arrayElem.count; ++i) {
-                //element
-                elem = [arrayElem objectAtIndex:i];
-                txt = [self getElementAttributeName:elem attribute:@"name"];
-                
-                DDLogVerbose(@"name=%@", txt);
-                
-                NSRange matchRange = [regex rangeOfFirstMatchInString:txt options:0 range:NSMakeRange(0, [txt length])];
-                // Did we find a matching range
-                if (matchRange.location != NSNotFound) {
-                    //부분 문자열이 아니라, 전체 문자열이 일치하는 경우 성공
-                    if (matchRange.length == [txt length])
-                        return elem;
-                }
-                
-                //matches = [regex matchesInString:txt options:0 range:NSMakeRange(0, [txt length])];
-                //if ([matches count] > 0)
-            }
-        }
-        //value pattern
-        else if(obj.targetValue.length >0) {
-            regex = [NSRegularExpression regularExpressionWithPattern:obj.targetValue options:0 error:nil];
- 
-            for (int i=0; i< arrayElem.count; ++i) {
-                //element
-                elem = [arrayElem objectAtIndex:i];
-                txt = [self getElementAttributeName:elem attribute:@"value"];
-                
-                DDLogVerbose(@"value=%@", txt);
-                
-                NSRange matchRange = [regex rangeOfFirstMatchInString:txt options:0 range:NSMakeRange(0, [txt length])];
-                // Did we find a matching range
-                if (matchRange.location != NSNotFound) {
-                    //부분 문자열이 아니라, 전체 문자열이 일치하는 경우 성공
-                    if (matchRange.length == [txt length])
-                        return elem;
-                }
-            }
-        }//if - else :
-    }//if - else : array
+                   for (int i=0; i< arrayElem.count; ++i) {
+                       //element
+                       elem = [arrayElem objectAtIndex:i];
+                       txt = [self getElementAttributeName:elem attribute:@"name"];
+                       
+                       DDLogVerbose(@"name=%@", txt);
+                       
+                       if([txt isEqual:[NSNull null]]){
+                           NSLog(@"#########################");
+                           return nil;
+                       }
+                    
+                       if(txt != nil){
+                           NSLog(@"nil 이 아니라 ");
+                           
+                           NSRange matchRange = [regex rangeOfFirstMatchInString:txt options:0 range:NSMakeRange(0, [txt length])];
+                           NSLog(@"matchRange = %d",(int)matchRange.length);
+                           // Did we find a matching range
+                           if(matchRange.length == 0){
+                           }else{
+                               if (matchRange.location != NSNotFound) {
+                                   //부분 문자열이 아니라, 전체 문자열이 일치하는 경우 성공
+                                   if (matchRange.length == [txt length])
+                                       return elem;
+                               }
+                           }
+                       }else{
+                           NSLog(@"nil 이라 ");
+                           return nil;
+                       }
+                       
+                       //matches = [regex matchesInString:txt options:0 range:NSMakeRange(0, [txt length])];
+                       //if ([matches count] > 0)
+                   }
+               }
+               //value pattern
+               else if(obj.targetValue.length >0) {
+                   regex = [NSRegularExpression regularExpressionWithPattern:obj.targetValue options:0 error:nil];
+        
+                   for (int i=0; i< arrayElem.count; ++i) {
+                       //element
+                       elem = [arrayElem objectAtIndex:i];
+                       txt = [self getElementAttributeName:elem attribute:@"value"];
+                       
+                       DDLogVerbose(@"value=%@", txt);
+                       
+                       NSRange matchRange = [regex rangeOfFirstMatchInString:txt options:0 range:NSMakeRange(0, [txt length])];
+                       // Did we find a matching range
+                       if (matchRange.location != NSNotFound) {
+                           //부분 문자열이 아니라, 전체 문자열이 일치하는 경우 성공
+                           if (matchRange.length == [txt length])
+                               return elem;
+                       }
+                   }
+               }//if - else :
+           }//if - else : array
+    }
     
     return nil;
 }//getElementByPattern
@@ -2678,6 +3105,17 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 - (NSDictionary *)getElementByTargetInfo:(SelectObject *)obj {
     DDLogDebug(@"%s", __FUNCTION__);
     
+    if(![Utility checkValidateString:obj.targetName]){
+        return nil;
+    }
+    if(![Utility checkValidateString:obj.targetLabel]){
+        return nil;
+    }
+    if(![Utility checkValidateString:obj.targetValue]){
+        return nil;
+    }
+
+    
     NSArray* arrayElem = nil;
     BOOL bUseClassIndexMethod = FALSE;
     BOOL bUseeSecondMethod = FALSE;
@@ -2690,6 +3128,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
         if( obj.targetName.length || obj.targetValue.length ) {
             [xPath appendString:[NSString stringWithFormat:
                                  @"[%@ %@ %@]",
+//                                 @"[%@ %@ %@ and wdVisible=1]",
                                  (obj.targetName.length ? [NSString stringWithFormat:@"@name=\"%@\"", obj.targetName] : @""),
                                  (((obj.targetName.length > 0) && (obj.targetValue.length > 0)) ? @" and ": @""),
                                  (obj.targetValue.length ? [NSString stringWithFormat:@"@value=\"%@\"", obj.targetValue] : @"")]];
@@ -2706,7 +3145,7 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
 //        }
         
         
-        NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:60.0f], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
+        NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:10.0f], CMD:@"/elements", BODY:body, SESSION_ID:self.sessionID};
         NSDictionary * result = [self syncRequest:requestData];
         DDLogInfo(@"getElementByTargetInfo result = %@",result);
         
@@ -2719,12 +3158,12 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
             arrayElem = nil;
         }
         NSString * sessionId = [result objectForKey:@"sessionId"];
-        if( sessionId)
+        if( sessionId){
             self.sessionID = sessionId;
-        else
+        }else{
             NSLog(@"흠...");
-        
-        
+//            [self startIProxy];
+        }
     }
     
     if (arrayElem == nil || arrayElem.count==0) {
@@ -2869,6 +3308,39 @@ typedef NS_ENUM(NSUInteger, START_STATUS) {
             
             [self homescreen];
         }
+    }
+}
+
+- (void)terminateApp:(NSString *)bundleId{
+    NSDictionary * body = @{@"bundleId":bundleId};
+    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:10.0f], CMD:@"/wda/apps/terminate", BODY:body, SESSION_ID:self.sessionID};
+
+    __block NSDictionary * result = nil;
+    dispatch_sync(_launchAppQueue, ^{
+        result = [self syncRequest:requestData];;
+    });
+    
+    if( !result ) {
+        DDLogError(@"%s -- 결과 없음", __FUNCTION__);
+    }else{
+        NSLog(@"terminate ( %@ ) = %@",bundleId,result);
+    }
+}
+
+- (void)launchApp:(NSString *)bundleId{
+    NSDictionary * body = @{@"bundleId":bundleId};
+    NSDictionary * requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:_portNum], TIME_OUT:[NSNumber numberWithFloat:10.0f], CMD:@"/wda/apps/launch", BODY:body, SESSION_ID:self.sessionID};
+
+
+    __block NSDictionary * result = nil;
+    dispatch_sync(_launchAppQueue, ^{
+        result = [self syncRequest:requestData];;
+    });
+    
+    if( !result ) {
+        DDLogError(@"%s -- 결과 없음", __FUNCTION__);
+    }else{
+        NSLog(@"terminate ( %@ ) = %@",bundleId,result);
     }
 }
 

@@ -138,6 +138,9 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 - (NSDictionary *)executeScript:(NSString *)script;
 
 - (void)automationSearch:(NSData *)data andSelect:(BOOL)bSelect;
+
+- (void)likeSearch:(NSData *)data andSelect:(BOOL)bSelect;
+
 - (int)orientation;
 
 //=== INSTALL
@@ -155,8 +158,8 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 
 //Safari 초기화 테스트
 - (void)clearSafari;
-
-
+- (void)terminateApp:(NSString *)bundleId;
+- (void)launchApp:(NSString *)bundleId;
 
 @end
 

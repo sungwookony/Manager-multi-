@@ -66,6 +66,8 @@
 //=====
 - (void)autoInputText:(NSData *)data;
 - (void)automationSearch:(NSData *)data andSelect:(BOOL)bSelect;
+- (void)likeSearch:(NSData *)data andSelect:(BOOL)bSelect;
+
 - (void)autoOrientation:(BOOL)bLand;
 - (void)autoRunApp:(NSString *)bundleId;
 - (void)inputTextByString:(NSString *)string;
@@ -84,6 +86,8 @@
 - (void)removeInstalledApp:(BOOL)CMDCLEAR;
 - (void)clearProcess;
 - (void)resetDevice;
+
+- (void)terminateApp;
 
 /// @brief  앱리스트 정보를 구성한다.
 - (NSString *)getMyAppListForStart;

@@ -24,11 +24,16 @@ popen3(const char *command, int *infp, int *outfp)
 {
     int p_stdin[2], p_stdout[2];
     pid_t pid;
-	
+    
     if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
         return -1;
 	
     pid = fork();
+
+    NSLog(@"#%s#",__FUNCTION__);
+    NSLog(@"%d",pid);
+    NSLog(@"%d",pid);
+    NSLog(@"#%s#",__FUNCTION__);
 	
     if (pid < 0)
         return pid;
@@ -40,6 +45,11 @@ popen3(const char *command, int *infp, int *outfp)
         dup2(p_stdout[WRITE], WRITE);
 		close(p_stdout[READ]);
 		close(p_stdin[WRITE]);
+        
+        NSLog(@"############");
+        NSLog(@"%d",p_stdin[WRITE]);
+        NSLog(@"command = %s",command);
+        NSLog(@"############");
 		
         execl("/bin/sh", "sh", "-c", command, NULL);
         perror("execl");
@@ -241,6 +251,9 @@ popen3(const char *command, int *infp, int *outfp)
     int fpIn, fpOut;
     char line[1035];
     NSString *lsofCmd = [NSString stringWithFormat: @"/usr/sbin/lsof -t -i :%d", [port intValue]];
+    NSLog(@"######################### %s #####################",__FUNCTION__);
+    NSLog(@"#### %@ ####",lsofCmd);
+    NSLog(@"######################### %s #####################",__FUNCTION__);
     NSNumber *pid = nil;
 	pid_t lsofProcPid;
 
@@ -253,8 +266,12 @@ popen3(const char *command, int *infp, int *outfp)
 	    read(fpOut, line, 1035);
         //NSString *lineString = [[NSString stringWithUTF8String:line] stringByReplacingOccurrencesOfString:@"\n" withString:@""];
         NSString *readString = [NSString stringWithUTF8String:line];
+        NSLog(@"######################### %s #####################",__FUNCTION__);
+        NSLog(@"#### %d ####",(int)lsofProcPid);
+        NSLog(@"#### %@ ####",readString);
+        NSLog(@"######################### %s #####################",__FUNCTION__);
+
         NSRange range = [readString rangeOfString:@"\n"];
-        
         
         NSString *lineString;
         if( range.length > 0)
@@ -332,7 +349,9 @@ popen3(const char *command, int *infp, int *outfp)
 /// @brief lsof 로 특정 port 번호를 사용하고 있는 Task 의 pid 를 획득 하여 강제로 종료 시킨다. 이 클래스 메소드를 주로 사용함..
 + (void) killListenPort:(int)port exceptPid:(int)exceptPid {
     // /bin/bash -l -c "PID=`lsof -t -i TCP:4724` kill -9 '$PID'"
-    
+    NSLog(@"########################################################################");
+    NSLog(@"%s and %d and exception = %d",__FUNCTION__,port,exceptPid);
+    NSLog(@"########################################################################");
     // kill any processes using the appium server port
     {
         NSNumber *procPid;
@@ -341,8 +360,10 @@ popen3(const char *command, int *infp, int *outfp)
         {
             if (procPid != nil && exceptPid != [procPid intValue])
             {
-//                MLog(@"Listen port(%d) is already occupied.:PID(%d)",port, [procPid intValue]);
-//                MLog(@"Killing previous listen process");
+                NSLog(@"########################################################################");
+                NSLog(@"Listen port(%d) is already occupied.:PID(%d)",port, [procPid intValue]);
+                NSLog(@"Killing previous listen process");
+                NSLog(@"########################################################################");
                 @try
                 {
                     NSString *script = [NSString stringWithFormat:@"kill `lsof -t -i:%d`", port];
@@ -351,7 +372,9 @@ popen3(const char *command, int *infp, int *outfp)
                 }
                 @catch (NSException *exception)
                 {
-//                    MVLog(@"%@", exception.description);
+                    NSLog(@"########################################################################");
+                    NSLog(@"%@", exception.description);
+                    NSLog(@"########################################################################");
                 }
             }
         }
@@ -514,6 +537,55 @@ popen3(const char *command, int *infp, int *outfp)
     return serial;
 }
 
+
++ (NSString *)deviceVersion{
+    NSString* output;
+    @try
+    {
+        // Set up the process
+        NSTask *t = [[NSTask alloc] init];
+        [t setLaunchPath:@"/usr/local/bin/ideviceinfo"];
+        [t setArguments:[NSArray arrayWithObjects:@"-k", @"ProductVersion", nil]];
+        
+        // Set the pipe to the standard output and error to get the results of the command
+        NSPipe *p = [[NSPipe alloc] init];
+        [t setStandardOutput:p];
+        [t setStandardError:p];
+        
+        // Launch (forks) the process
+        [t launch]; // raises an exception if something went wrong
+        
+        // Prepare to read
+        NSFileHandle *readHandle = [p fileHandleForReading];
+        NSData *inData = nil;
+        NSMutableData *totalData = [[NSMutableData alloc] init];
+        
+        while ((inData = [readHandle availableData]) &&
+               [inData length]) {
+            [totalData appendData:inData];
+        }
+        
+        // Polls the runloop until its finished
+        [t waitUntilExit];
+        
+        
+        NSLog(@"Terminationstatus: %d", [t terminationStatus]);
+        NSLog(@"Data recovered: %@", totalData);
+        
+        output = [[NSString alloc] initWithData:totalData encoding: NSUTF8StringEncoding];
+        [readHandle closeFile];
+        
+    }
+    @catch (NSException *e)
+    {
+        NSLog(@"2 Expection occurred %@", [e reason]);
+        
+    }
+    output = [output stringByReplacingOccurrencesOfString:@"\n" withString:@""];
+    
+    return output;
+}
+
 /// @brief 문자열을 토큰단위로 분쇄함.. TextInput 에 사용함.  iOS 9.x 이하 버전에서 TextInput 을 할때 한글은 문자로 입력하면 들어가지 않았음..
 + (NSString *)getHangulDecomposition:(NSString *)hangul{
     NSString *countryCode = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
@@ -590,6 +662,7 @@ popen3(const char *command, int *infp, int *outfp)
     
     NSTask * testTask = [[NSTask alloc] init];
     testTask.launchPath = @"/bin/bash";
+
     testTask.arguments  = [NSArray arrayWithObjects:
                            @"-l", @"-c",
                            commandString,
@@ -600,19 +673,85 @@ popen3(const char *command, int *infp, int *outfp)
     [testTask setStandardOutput: pipe];
     NSFileHandle *file = [pipe fileHandleForReading];
     
+    __block BOOL bLaunch = YES;
+    __block NSError * error = nil;
     if( [NSThread isMainThread] ) {
-        [testTask launch];
+
+        if (@available(macOS 10.13, *)) {
+            bLaunch = [testTask launchAndReturnError:&error];
+        } else {
+            [testTask launch];
+        }
+        
     } else {
         dispatch_sync(dispatch_get_main_queue(), ^(void){
-            [testTask launch];
+            if (@available(macOS 10.13, *)) {
+                bLaunch = [testTask launchAndReturnError:&error];
+            } else {
+                [testTask launch];
+            }
         });
     }
-    
-    NSData *data = [file readDataToEndOfFile];
-    NSString *output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
-    [file closeFile];
+    if(error == nil){
+        if(bLaunch){
+            NSData *data = [file readDataToEndOfFile];
+            NSString *output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
+            [file closeFile];
 
-    return output;
+            return output;
+        }else{
+            [file closeFile];
+            return nil;
+        }
+    }else{
+        NSLog(@"%s error = %@",__FUNCTION__,error.description);
+        [file closeFile];
+        return nil;
+    }
+}
+
+// YES : 특수문자를 포함하고있음
+// NO  : 특수문자를 포함하고 있지 않음
++ (BOOL)checkValidateString:(NSString *)string{
+    
+    if(!string){
+        return YES;
+    }
+    NSLog(@"######## %@ ########",string);
+    
+    NSString *ptn = @"^[\\sㄱ-ㅎㅏ-ㅣa-zA-Z0-9가-힣.,<>?/'\"~*&(){}|_`:;!@#$%^*+=\\-\\[\\]\\\\ㆍ]*$";
+    NSRange checkRange = [string rangeOfString:ptn options:NSRegularExpressionSearch];
+
+    if(checkRange.length == 0){ //특수문자
+        NSLog(@"특수문자1");
+        return NO;
+        
+    }else{
+        NSLog(@"특수문자2");
+        return YES;
+        
+    }
+}
+
+
++ (void) restartManager {
+    DDLogError(@"1%s", __FUNCTION__);
+    
+    NSString* mgr = nil;
+    
+    NSArray* array = [[[NSBundle mainBundle] bundlePath] componentsSeparatedByString:@"/"];
+    int nTotalCount = (int)[array count];
+    NSString* appName = [array objectAtIndex:nTotalCount-1];
+    DDLogInfo(@"AppName = %@",appName);
+    if([appName isEqualToString:@"Manager.app"]){
+        mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
+    }else{
+        mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
+    }
+    
+    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
+//    exit(0);
+    DDLogError(@"%s", __FUNCTION__);
 }
 
 @end

@@ -32,6 +32,11 @@
 
 + (NSString *)launchTask:(NSString *)launchPath arguments:(NSArray *)arguments;
 + (NSString *) launchTaskFromBash:(NSString *)commandString;
+//특수문자 포함여부 확인
++ (BOOL)checkValidateString:(NSString* )string;
+
++ (NSString *)deviceVersion;
++ (void) restartManager;
 
 #define LOG_APPIUM          0x01
 #define LOG_APPIUM_ERR      0x02

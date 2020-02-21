@@ -132,7 +132,7 @@
 
 /// @brief      소켓에서 데이터를 읽었을때 호출되는 Delegate
 - (void)socket:(GCDAsyncSocket *)sock didReadData:(NSData *)data withTag:(long)tag {
-//    DDLogWarn(@"%s, %d, tag : %d", __FUNCTION__, (int)_deviceNo, tag);
+//    DDLogWarn(@"%s, %d, tag : %ld", __FUNCTION__, (int)_deviceNo, tag);
     __weak typeof(self) w_self = self ;
     
     //mg//dispatch_async(dispatch_get_main_queue(), ^{
@@ -160,34 +160,44 @@
 #pragma mark - <User Functions>
 /// @brief      iproxy 타스크를 실행시킨다.
 - (void) startIProxyTask {
-    [self stopIProxyTask];
-    
-    DDLogDebug(@"%s",__FUNCTION__);
-    
-    int nPortNum = RESOURCE_PORT + _deviceNo;
-    DDLogInfo(@"%s and %d",__FUNCTION__,_deviceNo);
-    NSString * commandString = [NSString stringWithFormat:@"iproxy %d %d %@", nPortNum, nPortNum, _udid];
-    
-    _myIProxyTask = [[NSTask alloc] init];
-    _myIProxyTask.launchPath = @"/bin/bash";
-    _myIProxyTask.arguments = @[@"-l", @"-c", commandString];
-    
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskTerminated:) name:NSTaskDidTerminateNotification object:_myIProxyTask];
-    
-    _communicatorWithIproxyHandler = [[PipeHandler alloc] initWithDelegate:self];
-    _communicatorWithIproxyErrorHandler = [[PipeHandler alloc] initWithDelegate:self];
-    [_communicatorWithIproxyHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_OUTPUT];
-    [_communicatorWithIproxyErrorHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_ERROR];
+    @try{
+        [self stopIProxyTask];
+        
+        DDLogDebug(@"%s",__FUNCTION__);
+        
+        int nPortNum = RESOURCE_PORT + _deviceNo;
+        DDLogInfo(@"%s and %d",__FUNCTION__,_deviceNo);
+        NSString * commandString = [NSString stringWithFormat:@"iproxy %d %d %@", nPortNum, nPortNum, _udid];
+        
+        _myIProxyTask = [[NSTask alloc] init];
+        _myIProxyTask.launchPath = @"/bin/bash";
+        _myIProxyTask.arguments = @[@"-l", @"-c", commandString];
+        
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskTerminated:) name:NSTaskDidTerminateNotification object:_myIProxyTask];
+        
+        _communicatorWithIproxyHandler = [[PipeHandler alloc] initWithDelegate:self];
+        _communicatorWithIproxyErrorHandler = [[PipeHandler alloc] initWithDelegate:self];
+        [_communicatorWithIproxyHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_OUTPUT];
+        [_communicatorWithIproxyErrorHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_ERROR];
 
-    //mg//s
-    if( [NSThread isMainThread] ) {
-        [_myIProxyTask launch];
-    } else {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            DDLogDebug(@"start iproxy task");
-            [_myIProxyTask launch];
-        });
+        //mg//s
+        if( [NSThread isMainThread] ) {
+            @autoreleasepool {
+                [_myIProxyTask launch];
+            }
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                DDLogDebug(@"start iproxy task");
+                @autoreleasepool {
+                    [_myIProxyTask launch];
+                }
+            });
+        }
     }
+    @catch(NSException* ex){
+        DDLogError(@"%@",ex.description);
+    }
+
     //mg//e
 
     //예왜 일괄처리
@@ -397,11 +407,11 @@
 
 /// @brief      소켓에서 읽어들은 데이터를 처리함.
 - (void)processReceivedData:(NSData *)data withTag:(long)tag {
-    DDLogDebug(@"%s", __FUNCTION__);
-    DDLogDebug(@"rx %d", (int)data.length);
-    NSLog(@"data = %@",data);
+//    DDLogDebug(@"%s", __FUNCTION__);
+//    DDLogDebug(@"rx %d", (int)data.length);
+//    NSLog(@"data = %@",data);
     NSString * uploadedPacket = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    DDLogVerbose(@"packet = %@ and data size = %d",uploadedPacket,(int)data.length);
+//    DDLogVerbose(@"packet = %@ and data size = %d",uploadedPacket,(int)data.length);
     NSArray * content = [uploadedPacket componentsSeparatedByString:@":"];
     
     if( content.count == 2 ) {

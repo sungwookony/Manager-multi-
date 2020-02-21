@@ -19,6 +19,7 @@
 #import "DeviceInfo.h"
 #import "Utility.h"
 
+#import "AppDelegate.h"
 
 #define TAG_READ_MANUAL         0
 #define TAG_READ_AUTO           1
@@ -111,6 +112,10 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     
     dispatch_queue_t socketQueue = dispatch_queue_create("socketQueue", NULL);
 //    dispatch_queue_t mainQueue = dispatch_get_main_queue();
+    if(listenSocket != nil){
+        listenSocket = nil;
+    }
+
     listenSocket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:socketQueue];
     
     NSError *error = nil;
@@ -121,6 +126,9 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     
 #ifdef USE_AUTO_MNG
     dispatch_queue_t autoSocketQueue = dispatch_queue_create("autoSocketqueue", NULL);
+    if(autoListenSocket != nil){
+        autoListenSocket = nil;
+    }
     autoListenSocket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:autoSocketQueue];
     
     if( ![autoListenSocket acceptOnPort:self.nAutoPort error:&error] ) {
@@ -180,11 +188,18 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     [self commonResponse:YES reqCmd:0 msg:@"접속성공" deviceNo:itemInfo.deviceInfos.deviceNo];
     
     if( (int)newSocket.localPort == (int)_nPort ) {
+        if(connectedSocket != nil)
+            connectedSocket = nil;
+        
         connectedSocket = newSocket;
 //        [connectedSocket readDataWithTimeout:-1 tag:0];
         [connectedSocket readDataWithTimeout:-1 tag:TAG_READ_MANUAL];
     } else if ( (int)newSocket.localPort == (int)_nAutoPort ) {
 #ifdef USE_AUTO_MNG
+        if(autoConnectedSocket != nil)
+            autoConnectedSocket = nil;
+        
+        
         autoConnectedSocket = newSocket;
         [autoConnectedSocket readDataWithTimeout:-1 tag:TAG_READ_AUTO];
 #endif
@@ -257,7 +272,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 #pragma mark 수신된 패킷으로 기능 실행.
 /// @brief 소켓에서 데이터를 받으면 호출되는 Delegate 메소드
 - (void)socket:(GCDAsyncSocket *)sock didReadData:(NSData *)data withTag:(long)tag {
-    DDLogDebug(@"%s data size = %d", __FUNCTION__, (int)data.length);
+//    DDLogDebug(@"%s data size = %d and tag = %d", __FUNCTION__, (int)data.length,(int)tag);
     
     __weak typeof(self) w_self = self ;
     
@@ -360,9 +375,10 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         [self commonResponse:NO deviceNo:argDeviceNo];
     } else {
         dispatch_async(infoQueue, ^(void){
-            [itemInfo launchResource];
-            [itemInfo startAgentManual:manual];
+//            [itemInfo launchResource];
             
+            [itemInfo startAgentManual:manual];
+
             //onycap
             /*NSTask *task = [[NSTask alloc] init];
             task.launchPath = @"/bin/bash";
@@ -434,17 +450,12 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     ConnectionItemInfo* itemInfo = [self.mainController connectionItemInfoByDeviceNo:argDeviceNo];
     if(itemInfo != nil){
         dispatch_async(infoQueue, ^(void){
-            //mg//onycap
-            /*NSTask *task = [[NSTask alloc] init];
-            task.launchPath = @"/bin/bash";
-            task.arguments = @[@"-l", @"-c", @"killall Onycap"];
             
-            @try {
-                [task launch];
-                DDLogInfo(@"terminate onycap");
-            } @catch (NSException *e) {
-                DDLogError(@"onycap terminate error = %@", e.reason);
-            }*/
+            //앱 모두 초기화 해당 기능은 추후 운영팀에서 요청시에 추가하여 준다.swccc
+//            __block dispatch_semaphore_t syncSem = dispatch_semaphore_create(0);
+//            dispatch_semaphore_wait(syncSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60.0f * NSEC_PER_SEC)));
+//            [itemInfo terminateApp];
+//            dispatch_semaphore_signal(syncSem);
             
             [itemInfo hardKeyEvent:3 longpress:0];//mg//앱 실행 화면에서 삭제하면 검정 화면이 표시되는 사례가 있으므로, 홈화면으로 바꾸고 삭제
             [itemInfo hardKeyEvent:3 longpress:0];//mg//앱 실행 화면에서 삭제하면 검정 화면이 표시되는 사례가 있으므로, 홈화면으로 바꾸고 삭제
@@ -464,15 +475,26 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             const uint8_t * clear = (packet ? (uint8_t *)packet.bytes : NULL);
             if( clear ) {
                 if ((int)clear[0] == 0)// packet 이 존재하며, clear == 0 인 상태 앱을 삭제 하지 않는다.
+                    //Manager Restart swccc
+                    //매우 좋지 않은 방법이다 해결방안이 있으면 해결하는 것이 제일 좋다
+                    [Utility restartManager];
+                    exit(0);
                     return;
             }
             
             // !packet 기존 아무것도 없을때, clear == 1 clear 명령을 받을 때
             [itemInfo removeInstalledApp:NO];          // Clear 명령을 받으면 resetAppium 의 결과과 도달할 때 까지 기대렸다가 호출되는것으로 변경됨.
-
+            
+            //Manager Restart swccc
+            //매우 좋지 않은 방법이다 해결방안이 있으면 해결하는 것이 제일 좋다
+            [Utility restartManager];
+            exit(0);
+            
+            
         });//info queue
     }
 }//processEndConnectionByPacket
+
 
 /// @brief wakeup command 수신되어 호출되는데 iPhne 은 해당 기능이 없어 테스트 하는 용도로 사용함. 배포시 아래 함수 내용을 주석처리 해야함.
 - (void)__processWakeupByPacket:(NSData *)packet deviceNo:(int)argDeviceNo {
@@ -530,7 +552,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 - (void)__processDownMoveUpByPacket:(NSData *)packet command:(NSInteger)cmd deviceNo:(int)argDeviceNo {
     
 #ifdef DEBUG
-    DDLogInfo(@"%s, %d", __FUNCTION__, argDeviceNo);
+//    DDLogInfo(@"%s, %d", __FUNCTION__, argDeviceNo);
 #endif
     __block __typeof__(self) blockSelf = self;
     dispatch_async(infoQueue, ^(void){
@@ -755,7 +777,6 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         ConnectionItemInfo* itemInfo = [blockSelf.mainController connectionItemInfoByDeviceNo:argDeviceNo];
         if(itemInfo == nil) return;
         
-        //mg//
         if (_bStopTask)
             return;
 
@@ -790,7 +811,6 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         ConnectionItemInfo* itemInfo = [blockSelf.mainController connectionItemInfoByDeviceNo:argDeviceNo];
         if(itemInfo == nil) return;
         
-        //mg//
         if (_bStopTask)
             return;
         
@@ -1038,7 +1058,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 #endif
     
     dispatch_async(infoQueue, ^(void){
-        //mg//
+
         if (_bStopTask)
             return;
 
@@ -1059,7 +1079,6 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 #endif
 
     dispatch_async(infoQueue, ^(void){
-        //mg//
         if (_bStopTask)
             return;
 
@@ -1067,8 +1086,26 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         if(itemInfo == nil) {
             [self commonResponse:NO deviceNo:argDeviceNo];
         } else {
-            //        [itemInfo autoSelect:packet];
             [itemInfo automationSearch:packet andSelect:YES];
+        }
+    });
+}
+
+//@brief Like 문구 검색
+-(void)__processLikeSelectByPacket:(NSData *)packet deviceNo:(int)argDeviceNo{
+    #ifdef DEBUG
+        DDLogWarn(@"%s, %d", __FUNCTION__, argDeviceNo);
+    #endif
+        
+    dispatch_async(infoQueue, ^(void){
+        if (_bStopTask)
+            return;
+
+        ConnectionItemInfo* itemInfo = [self.mainController connectionItemInfoByDeviceNo:argDeviceNo];
+        if(itemInfo == nil) {
+            [self commonResponse:NO deviceNo:argDeviceNo];
+        } else {
+            [itemInfo likeSearch:packet andSelect:YES];
         }
     });
 }
@@ -1284,7 +1321,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 /// @brief 파싱된 데이터로 동작 결정.
 //packetData : 패킷의 데이터 부분
 - (void)doActionByPacketCommand:(NSInteger)cmd deviceNo:(int)argDeviceNo packetData:(NSData *)data size:(int)dataSize {
-    DDLogDebug(@"%s", __FUNCTION__);
+//    DDLogDebug(@"%s", __FUNCTION__);
     DDLogInfo(@"packet from DC = %d", (int)cmd);
     //DC창에 명령어 로그 추가
 //    DCLog(@"%d",(int)cmd);
@@ -1392,6 +1429,10 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             break;
         case CMD_AUTO_SELECT:{
             [self __processAutoSelectByPacket:data deviceNo:argDeviceNo];
+        }
+            break;
+        case CMD_LIKE_SELECT:{
+            [self __processLikeSelectByPacket:data deviceNo:argDeviceNo];
         }
             break;
         case CMD_AUTO_SEARCH:{
@@ -1548,7 +1589,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 //        [connectedSocket writeData:packet withTimeout:-1 tag:0];
         [[self getSendTargetSocket:deviceNo] writeData:packet withTimeout:-1 tag:0];
     });
-    NSLog(@"데이터 보냄");
+//    NSLog(@"데이터 보냄");
 }
 // ~
 

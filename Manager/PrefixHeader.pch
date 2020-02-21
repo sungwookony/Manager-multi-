@@ -65,7 +65,8 @@ static NSString * const DeviceInfo = @"DeviceInfo";
 #define SCAPTURE_MODE_QUICKTIME     @"QuickTime"
 
 #define XCTEST_RUN_KEY              @"XCTRun"
-
+#define DEVICE_UDID                 @"UDID"
+#define DEVICE_RATIO                @"RATIO"
 
 #define DEVICE_CONNECT      @"DEVICE_CONNECT"
 #define DEVICE_LOG          @"DEVICE_LOG"

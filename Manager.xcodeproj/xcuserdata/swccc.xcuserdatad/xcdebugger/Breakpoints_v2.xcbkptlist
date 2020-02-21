@@ -14,10 +14,10 @@
             filePath = "Manager/ManagerUtility/ConnectionItemInfo.m"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "687"
-            endingLineNumber = "687"
-            landmarkName = "-applicationLaunchSuccessed"
-            landmarkType = "7">
+            startingLineNumber = "718"
+            endingLineNumber = "718"
+            landmarkName = "ConnectionItemInfo"
+            landmarkType = "3">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

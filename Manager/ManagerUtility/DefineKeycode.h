@@ -52,6 +52,7 @@
 
 ////////////////////////////////
 #define CMD_STATUS      334
+#define CMD_LIKE_SELECT 335
 ////////////////////////////////
 #define CMD_SND_DEVICE_CHANGE   403
 

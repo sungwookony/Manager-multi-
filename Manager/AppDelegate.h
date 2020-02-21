@@ -12,5 +12,7 @@
 
 @property (weak) IBOutlet NSWindow *window;
 
+void restartManager();
+
 @end
 

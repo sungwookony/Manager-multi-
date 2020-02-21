@@ -159,9 +159,8 @@ void uncauthExceptionHandler(NSException *exception)
     LogToFile(exception.description);
     LogToFile([exception callStackSymbols].description);
     
-    [SentryClient.sharedClient crash];
-    
-    
+//    [SentryClient.sharedClient crash];
+
 }
 
 /**
@@ -195,16 +194,6 @@ void restartManager() {
     [[NSWorkspace sharedWorkspace] launchApplication:mgr];
 //    exit(0);
     DDLogError(@"%s", __FUNCTION__);
-//
-//    NSString *path = [[NSBundle mainBundle] executablePath];
-//
-//    NSLog(@"path = %@",path);
-//
-//    NSTask * restartTask = [[NSTask alloc] init];
-//    restartTask.launchPath = path;
-//    [restartTask launch];
-//
-//    [[NSApplication sharedApplication] terminate:nil];
 }
 
 @end

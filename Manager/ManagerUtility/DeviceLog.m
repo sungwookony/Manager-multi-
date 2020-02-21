@@ -103,6 +103,8 @@
     NSString * logCmdPath = [theManagerDirectory stringByAppendingPathComponent:@"deviceconsole"];
 
     __block __typeof__(self) blockSelf = self;
+    if(self.logTask != nil)
+        self.logTask = nil;
     self.logTask = [[NSTask alloc] init];
     [self.logTask  setLaunchPath:logCmdPath];
     [self.logTask  setArguments: [[NSArray alloc] initWithObjects:
@@ -115,11 +117,15 @@
     //mg//[self.logTask launch];
     //mg//s
     if( [NSThread isMainThread] ) {
-        [self.logTask launch];
+        @autoreleasepool {
+            [self.logTask launch];
+        }
     } else {
         dispatch_async(dispatch_get_main_queue(), ^{
             DDLogDebug(@"start device log task");
-            [self.logTask launch];
+            @autoreleasepool {
+                [self.logTask launch];
+            }
         });
     }
     //mg//e

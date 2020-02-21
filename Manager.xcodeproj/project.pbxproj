@@ -66,11 +66,12 @@
 		58CF26B31D815C74009BEE9A /* DDDispatchQueueLogFormatter.m in Sources */ = {isa = PBXBuildFile; fileRef = 58CF26A71D815C74009BEE9A /* DDDispatchQueueLogFormatter.m */; };
 		58CF26B41D815C74009BEE9A /* DDMultiFormatter.m in Sources */ = {isa = PBXBuildFile; fileRef = 58CF26A91D815C74009BEE9A /* DDMultiFormatter.m */; };
 		58DDB0D31B608B1600343F4F /* DeviceLog.m in Sources */ = {isa = PBXBuildFile; fileRef = 58DDB0D21B608B1600343F4F /* DeviceLog.m */; };
-		CEAFBCE51B40C43100F12425 /* GCDAsyncSocket.m in Sources */ = {isa = PBXBuildFile; fileRef = CEAFBCE41B40C43100F12425 /* GCDAsyncSocket.m */; };
 		CEAFBCE81B40CFEE00F12425 /* CommunicatorWithDC.m in Sources */ = {isa = PBXBuildFile; fileRef = CEAFBCE71B40CFEE00F12425 /* CommunicatorWithDC.m */; };
 		CEAFBEFD1B423A6700B9872C /* ConnectionItemInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = CEAFBEFC1B423A6700B9872C /* ConnectionItemInfo.m */; };
 		F91443912214E8B7003C1A75 /* Sentry.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F91443902214E8B6003C1A75 /* Sentry.framework */; };
 		F91443922214E8B7003C1A75 /* Sentry.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F91443902214E8B6003C1A75 /* Sentry.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		F99B366323C4104800F8903F /* CoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F99B366223C4104800F8903F /* CoreServices.framework */; };
+		F9D5650123E1A176006C0BE4 /* GCDAsyncSocket.m in Sources */ = {isa = PBXBuildFile; fileRef = F9D564FF23E1A176006C0BE4 /* GCDAsyncSocket.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -210,14 +211,15 @@
 		58CF26A91D815C74009BEE9A /* DDMultiFormatter.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DDMultiFormatter.m; sourceTree = "<group>"; };
 		58DDB0D11B608B1600343F4F /* DeviceLog.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DeviceLog.h; sourceTree = "<group>"; };
 		58DDB0D21B608B1600343F4F /* DeviceLog.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DeviceLog.m; sourceTree = "<group>"; };
-		CEAFBCE31B40C43100F12425 /* GCDAsyncSocket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GCDAsyncSocket.h; sourceTree = "<group>"; };
-		CEAFBCE41B40C43100F12425 /* GCDAsyncSocket.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GCDAsyncSocket.m; sourceTree = "<group>"; };
 		CEAFBCE61B40CFEE00F12425 /* CommunicatorWithDC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CommunicatorWithDC.h; sourceTree = "<group>"; };
 		CEAFBCE71B40CFEE00F12425 /* CommunicatorWithDC.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CommunicatorWithDC.m; sourceTree = "<group>"; };
 		CEAFBCEA1B40F2D000F12425 /* DefineKeycode.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DefineKeycode.h; sourceTree = "<group>"; };
 		CEAFBEFB1B423A6700B9872C /* ConnectionItemInfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ConnectionItemInfo.h; sourceTree = "<group>"; };
 		CEAFBEFC1B423A6700B9872C /* ConnectionItemInfo.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ConnectionItemInfo.m; sourceTree = "<group>"; };
 		F91443902214E8B6003C1A75 /* Sentry.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Sentry.framework; sourceTree = "<group>"; };
+		F99B366223C4104800F8903F /* CoreServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreServices.framework; path = System/Library/Frameworks/CoreServices.framework; sourceTree = SDKROOT; };
+		F9D564FF23E1A176006C0BE4 /* GCDAsyncSocket.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GCDAsyncSocket.m; sourceTree = "<group>"; };
+		F9D5650023E1A176006C0BE4 /* GCDAsyncSocket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GCDAsyncSocket.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -228,6 +230,7 @@
 				508A36CB1F4D7F6B00CF0B35 /* CoreMedia.framework in Frameworks */,
 				F91443912214E8B7003C1A75 /* Sentry.framework in Frameworks */,
 				508A36CC1F4D7F6B00CF0B35 /* CoreMediaIO.framework in Frameworks */,
+				F99B366323C4104800F8903F /* CoreServices.framework in Frameworks */,
 				507971C71E14CF5700506826 /* CoreFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -446,8 +449,8 @@
 				500B655C1D824A2E000B79A5 /* DeviceInfo.m */,
 				58DDB0D11B608B1600343F4F /* DeviceLog.h */,
 				58DDB0D21B608B1600343F4F /* DeviceLog.m */,
-				CEAFBCE31B40C43100F12425 /* GCDAsyncSocket.h */,
-				CEAFBCE41B40C43100F12425 /* GCDAsyncSocket.m */,
+				F9D5650023E1A176006C0BE4 /* GCDAsyncSocket.h */,
+				F9D564FF23E1A176006C0BE4 /* GCDAsyncSocket.m */,
 				50A969041D096CAB00A32270 /* HHURLConnection.h */,
 				50A969051D096CAB00A32270 /* HHURLConnection.m */,
 				5001771A1CEED46200C5CB50 /* LogWriteToFile.h */,
@@ -467,6 +470,7 @@
 		CEAFBCE21B40C28700F12425 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				F99B366223C4104800F8903F /* CoreServices.framework */,
 				508A36C91F4D7F6B00CF0B35 /* CoreMedia.framework */,
 				508A36CA1F4D7F6B00CF0B35 /* CoreMediaIO.framework */,
 				508A36C71F4D7EB400CF0B35 /* Cocoa.framework */,
@@ -571,6 +575,7 @@
 				508A36C61F4D48A800CF0B35 /* CommunicatorWithVPS.m in Sources */,
 				3D8C811F1B37C92D00E1824A /* main.m in Sources */,
 				50A969061D096CAB00A32270 /* HHURLConnection.m in Sources */,
+				F9D5650123E1A176006C0BE4 /* GCDAsyncSocket.m in Sources */,
 				5085B1461F2EEF0300F27086 /* WebDriverControlAgent.m in Sources */,
 				3D8C81681B37CE8F00E1824A /* SERemoteWebDriver.m in Sources */,
 				58CF26AE1D815C74009BEE9A /* DDASLLogger.m in Sources */,
@@ -602,7 +607,6 @@
 				3D8C81641B37CE8F00E1824A /* SEError.m in Sources */,
 				3D8C816B1B37CE8F00E1824A /* SETouchAction.m in Sources */,
 				36CBFAE820AD7C81002C41BC /* ManagerLogFileFormat.m in Sources */,
-				CEAFBCE51B40C43100F12425 /* GCDAsyncSocket.m in Sources */,
 				58CF26B21D815C74009BEE9A /* DDContextFilterLogFormatter.m in Sources */,
 				507EF4D91F4BB5CB00FA934C /* ScreenCapture.m in Sources */,
 				5085B1401F2EEDD500F27086 /* ControlAgent.m in Sources */,
@@ -716,7 +720,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_ENTITLEMENTS = Manager/Manager.entitlements;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "";
 				CODE_SIGN_STYLE = Automatic;
@@ -736,7 +740,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				MARKETING_VERSION = 2.5.2;
+				MARKETING_VERSION = 2.5.6;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.onycom.Manager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -752,7 +756,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_ENTITLEMENTS = Manager/Manager.entitlements;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "";
 				CODE_SIGN_STYLE = Automatic;
@@ -768,7 +772,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				MARKETING_VERSION = 2.5.2;
+				MARKETING_VERSION = 2.5.6;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = com.onycom.Manager;
 				PRODUCT_NAME = "$(TARGET_NAME)";
