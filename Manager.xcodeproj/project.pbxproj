@@ -68,8 +68,9 @@
 		58DDB0D31B608B1600343F4F /* DeviceLog.m in Sources */ = {isa = PBXBuildFile; fileRef = 58DDB0D21B608B1600343F4F /* DeviceLog.m */; };
 		CEAFBCE81B40CFEE00F12425 /* CommunicatorWithDC.m in Sources */ = {isa = PBXBuildFile; fileRef = CEAFBCE71B40CFEE00F12425 /* CommunicatorWithDC.m */; };
 		CEAFBEFD1B423A6700B9872C /* ConnectionItemInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = CEAFBEFC1B423A6700B9872C /* ConnectionItemInfo.m */; };
-		F91443912214E8B7003C1A75 /* Sentry.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F91443902214E8B6003C1A75 /* Sentry.framework */; };
-		F91443922214E8B7003C1A75 /* Sentry.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = F91443902214E8B6003C1A75 /* Sentry.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		F96A8BAA242AFA5D001B54E5 /* wait.jpeg in Resources */ = {isa = PBXBuildFile; fileRef = F96A8BA9242AFA5D001B54E5 /* wait.jpeg */; };
+		F96A8BAC242B12A6001B54E5 /* connect.jpeg in Resources */ = {isa = PBXBuildFile; fileRef = F96A8BAB242B12A6001B54E5 /* connect.jpeg */; };
+		F9792B80243D738000291B57 /* libc++abi.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = F9792B7F243D736F00291B57 /* libc++abi.tbd */; };
 		F99B366323C4104800F8903F /* CoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F99B366223C4104800F8903F /* CoreServices.framework */; };
 		F9D5650123E1A176006C0BE4 /* GCDAsyncSocket.m in Sources */ = {isa = PBXBuildFile; fileRef = F9D564FF23E1A176006C0BE4 /* GCDAsyncSocket.m */; };
 /* End PBXBuildFile section */
@@ -82,7 +83,6 @@
 			dstSubfolderSpec = 10;
 			files = (
 				507971C81E14CF5700506826 /* CoreFoundation.framework in Embed Frameworks */,
-				F91443922214E8B7003C1A75 /* Sentry.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -217,6 +217,9 @@
 		CEAFBEFB1B423A6700B9872C /* ConnectionItemInfo.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ConnectionItemInfo.h; sourceTree = "<group>"; };
 		CEAFBEFC1B423A6700B9872C /* ConnectionItemInfo.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ConnectionItemInfo.m; sourceTree = "<group>"; };
 		F91443902214E8B6003C1A75 /* Sentry.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Sentry.framework; sourceTree = "<group>"; };
+		F96A8BA9242AFA5D001B54E5 /* wait.jpeg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = wait.jpeg; sourceTree = "<group>"; };
+		F96A8BAB242B12A6001B54E5 /* connect.jpeg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = connect.jpeg; sourceTree = "<group>"; };
+		F9792B7F243D736F00291B57 /* libc++abi.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++abi.tbd"; path = "usr/lib/libc++abi.tbd"; sourceTree = SDKROOT; };
 		F99B366223C4104800F8903F /* CoreServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreServices.framework; path = System/Library/Frameworks/CoreServices.framework; sourceTree = SDKROOT; };
 		F9D564FF23E1A176006C0BE4 /* GCDAsyncSocket.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GCDAsyncSocket.m; sourceTree = "<group>"; };
 		F9D5650023E1A176006C0BE4 /* GCDAsyncSocket.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = GCDAsyncSocket.h; sourceTree = "<group>"; };
@@ -228,8 +231,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				508A36CB1F4D7F6B00CF0B35 /* CoreMedia.framework in Frameworks */,
-				F91443912214E8B7003C1A75 /* Sentry.framework in Frameworks */,
 				508A36CC1F4D7F6B00CF0B35 /* CoreMediaIO.framework in Frameworks */,
+				F9792B80243D738000291B57 /* libc++abi.tbd in Frameworks */,
 				F99B366323C4104800F8903F /* CoreServices.framework in Frameworks */,
 				507971C71E14CF5700506826 /* CoreFoundation.framework in Frameworks */,
 			);
@@ -241,6 +244,7 @@
 		3D8C810D1B37C92C00E1824A = {
 			isa = PBXGroup;
 			children = (
+				F96A8BA8242AFA56001B54E5 /* Image */,
 				F91443902214E8B6003C1A75 /* Sentry.framework */,
 				3D8C81181B37C92D00E1824A /* Manager */,
 				CEAFBCE21B40C28700F12425 /* Frameworks */,
@@ -470,6 +474,7 @@
 		CEAFBCE21B40C28700F12425 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				F9792B7F243D736F00291B57 /* libc++abi.tbd */,
 				F99B366223C4104800F8903F /* CoreServices.framework */,
 				508A36C91F4D7F6B00CF0B35 /* CoreMedia.framework */,
 				508A36CA1F4D7F6B00CF0B35 /* CoreMediaIO.framework */,
@@ -477,6 +482,15 @@
 				3D8C817C1B37E23700E1824A /* CoreFoundation.framework */,
 			);
 			path = Frameworks;
+			sourceTree = "<group>";
+		};
+		F96A8BA8242AFA56001B54E5 /* Image */ = {
+			isa = PBXGroup;
+			children = (
+				F96A8BA9242AFA5D001B54E5 /* wait.jpeg */,
+				F96A8BAB242B12A6001B54E5 /* connect.jpeg */,
+			);
+			path = Image;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -548,6 +562,8 @@
 			files = (
 				3D8C81661B37CE8F00E1824A /* Selenium-Info.plist in Resources */,
 				3D8C81211B37C92D00E1824A /* Images.xcassets in Resources */,
+				F96A8BAC242B12A6001B54E5 /* connect.jpeg in Resources */,
+				F96A8BAA242AFA5D001B54E5 /* wait.jpeg in Resources */,
 				3D8C813D1B37C9D100E1824A /* MainViewController.xib in Resources */,
 				3D8C815F1B37CE8F00E1824A /* docgen.sh in Resources */,
 				58CF268B1D813CBA009BEE9A /* header_icon_delete_n@2x.png in Resources */,
@@ -740,9 +756,9 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				MARKETING_VERSION = 2.5.6;
+				MARKETING_VERSION = 2.6;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.onycom.Manager;
+				PRODUCT_BUNDLE_IDENTIFIER = com.onycom.Manager4;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -772,9 +788,9 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				MARKETING_VERSION = 2.5.6;
+				MARKETING_VERSION = 2.6;
 				ONLY_ACTIVE_ARCH = NO;
-				PRODUCT_BUNDLE_IDENTIFIER = com.onycom.Manager;
+				PRODUCT_BUNDLE_IDENTIFIER = com.onycom.Manager4;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
