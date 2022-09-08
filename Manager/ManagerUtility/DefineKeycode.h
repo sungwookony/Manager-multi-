@@ -48,6 +48,8 @@
 #define CMD_AUTO_SELECT 303
 #define CMD_AUTO_SEARCH 304
 #define CMD_AUTO_RUNAPP 316
+//신한 기능 요청으로 기능 추가 앱종료
+#define CMD_TERMINATE_APP 336
 
 
 ////////////////////////////////
@@ -88,6 +90,9 @@
 #define CMD_CLOSE_APP           @"CMD_CLOSE_APP"        // App 이 종료되는 명령을 전달.
 #define CMD_SAFARI              @"CMD_SAFARI"
 #define CMD_RESET               @"CMD_RESET"
+
+#define DC_PORT                 @"DC_PORT"
+#define DC_PORTNO                 @"DC_PORT_NO"
 
 
 #define TIMEOUT_INSTRUMENTS_CNT 30.0f

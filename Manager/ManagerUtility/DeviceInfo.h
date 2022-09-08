@@ -15,6 +15,8 @@
 }
 
 @property (nonatomic, weak) id<DeviceInfosDelegate> customDelegate;
+@property (nonatomic, retain) NSMutableArray* arrayDeivce;
+
 @property (nonatomic, assign) int           deviceNo;           // DeviceNo
 @property (nonatomic, assign) int           appiumPort;
 @property (nonatomic, assign) int           appiumProxyPort;
@@ -34,10 +36,12 @@
 
 @property (nonatomic, assign, readonly) CGSize resolution;
 @property (nonatomic, assign) CGFloat ratio;
+@property (nonatomic, strong) NSString      * buildVersion;
 
 - (void) getDeviceInfo ;
 - (void) clearDeviceInfos ;
-
+-(NSString *) buildWDAResult:(NSString* )udid;
++ (DeviceInfos *)shareDeviceInfos;
 @end
 
 

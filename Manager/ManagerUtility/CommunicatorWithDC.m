@@ -25,7 +25,7 @@
 #define TAG_READ_AUTO           1
 
 
-@interface CommunicatorWithDC () <ResourceMornitorDelegate> {
+@interface CommunicatorWithDC () <ResourceMornitorDelegate,GCDAsyncSocketDelegate> {
     /// @brief 리슽소켓
     GCDAsyncSocket          * listenSocket;
     /// @brief DC 와 연결된 소켓
@@ -50,6 +50,10 @@
 
 /// @brief 자동화 소켓 포트 번호
 @property (nonatomic, assign) int       nAutoPort;
+
+
+
+@property (nonatomic, assign) int       nDragCount;
 
 @property (nonatomic, assign) BOOL  bStopTask;//mg//작업 중지
 
@@ -88,6 +92,9 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         infoQueue = dispatch_queue_create("REQUEST_QUEUE", NULL);//mg//serial queue
         infoSem = dispatch_semaphore_create(1);                  //mg//
         rxQueue = dispatch_queue_create("RX_SERIAL_QUEUE", NULL);//mg//
+        
+        
+        _nDragCount = 0;
     }
     return self;
 }
@@ -106,7 +113,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 }
 
 /// @brief 자동화 소켓과 메뉴얼 소켓을 생성하여 DC 와 연결을 기다린다.
-- (void)startInterfaceWithDC {
+- (BOOL)startInterfaceWithDC {
     
     DDLogInfo(@"%s, port : %d", __FUNCTION__, (int)self.nPort);
     
@@ -117,11 +124,19 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     }
 
     listenSocket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:socketQueue];
+        
+    DDLogWarn(@"PORT = %d",(int)self.nPort);
+    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+    int prevPort = (int)[defaults integerForKey:DC_PORT];
+    int prevPortNo = (int)[defaults integerForKey:DC_PORTNO];
     
+    DDLogWarn(@"prevPort = %d",(int)prevPortNo);
+    self.nPort += prevPortNo;
+    DDLogWarn(@"PORT = %d",(int)self.nPort);
     NSError *error = nil;
     if(![listenSocket acceptOnPort:self.nPort error:&error]) {
-        DDLogWarn(@"Error starting server: %@", error);
-        return;
+        DDLogWarn(@"Multi Error starting server: %@", error);
+        return NO;
     }
     
 #ifdef USE_AUTO_MNG
@@ -130,16 +145,68 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         autoListenSocket = nil;
     }
     autoListenSocket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:autoSocketQueue];
+    self.nAutoPort += prevPortNo;
+    if( ![autoListenSocket acceptOnPort:self.nAutoPort error:&error] ) {
+        DDLogWarn(@"Error Start Auto Server : %@", error.description);
+        return NO;
+    }
+    DDLogWarn(@"Server started on 1port %hu, port %d", [listenSocket localPort], (int)autoListenSocket.localPort);
+#else
+    DDLogWarn(@"Server started on port %hu", [listenSocket localPort]);
+#endif
+    return YES;
+}
+
+-(BOOL)disconnectSocket{
+    @try {
+        if(listenSocket != nil){
+            if(listenSocket.isConnected)
+               [listenSocket disconnect];
+            listenSocket = nil;
+        }
+        if(autoListenSocket != nil){
+            if(autoListenSocket.isConnected)
+               [autoListenSocket disconnect];
+            autoListenSocket = nil;
+        }
+    } @catch (NSException *exception) {
+        return NO;
+    }
+    return YES;
+}
+
+- (void)connectSocket:(int)nNumber andPort:(int)nValue{
+    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setInteger:nNumber forKey:DC_PORT];
+    [defaults setInteger:nValue forKey:DC_PORTNO];
     
+    if(listenSocket != nil){
+        listenSocket = nil;
+    }
+    dispatch_queue_t socketQueue = dispatch_queue_create("socketQueue", NULL);
+    listenSocket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:socketQueue];
+    
+    NSError *error = nil;
+    self.nPort = SOCKET_PORT + nValue;
+    if(![listenSocket acceptOnPort:self.nPort error:&error]) {
+        DDLogWarn(@"Error starting server: %@", error);
+        return;
+    }
+    
+    
+    if(autoListenSocket != nil){
+        autoListenSocket = nil;
+    }
+    dispatch_queue_t autoSocketQueue = dispatch_queue_create("autoSocketqueue", NULL);
+    autoListenSocket = [[GCDAsyncSocket alloc] initWithDelegate:self delegateQueue:autoSocketQueue];
+    
+    self.nAutoPort = AUTO_SOCKET_PORT + nValue;
     if( ![autoListenSocket acceptOnPort:self.nAutoPort error:&error] ) {
         DDLogWarn(@"Error Start Auto Server : %@", error.description);
         return ;
     }
-    DDLogWarn(@"Server started on port %hu, port %d", [listenSocket localPort], (int)autoListenSocket.localPort);
-#else
-    DDLogWarn(@"Server started on port %hu", [listenSocket localPort]);
-#endif
     
+    DDLogWarn(@"Server started on2 port %hu, port %d", [listenSocket localPort], (int)autoListenSocket.localPort);
 }
 
 /// @brief 디바이스 번호로 udid 획득
@@ -181,10 +248,16 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 
 - (void)socket:(GCDAsyncSocket *)sock didAcceptNewSocket:(GCDAsyncSocket *)newSocket {
     DDLogWarn(@"%s", __FUNCTION__);
+    NSLog(@"%d and %d",sock.localPort,newSocket.localPort);
     // This method is executed on the socketQueue (not the main thread)
     
     ConnectionItemInfo * itemInfo = [self.mainController firstConnectionItemInfo];
     NSLog(@"%d",itemInfo.deviceInfos.deviceNo);
+//    if([self connectCheckDevice]){
+//        [self commonResponse:YES reqCmd:0 msg:@"접속성공" deviceNo:itemInfo.deviceInfos.deviceNo];
+//    }else{
+//        return;
+//    }
     [self commonResponse:YES reqCmd:0 msg:@"접속성공" deviceNo:itemInfo.deviceInfos.deviceNo];
     
     if( (int)newSocket.localPort == (int)_nPort ) {
@@ -212,6 +285,35 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     
     [self sendDeviceChange:1 withInfo:itemInfo.deviceInfos andDeviceNo:itemInfo.deviceInfos.deviceNo];
 #endif
+}
+
+-(BOOL)connectCheckDevice{
+    
+    NSString * output = [Utility launchTaskFromSh:[NSString stringWithFormat:@"idevice_id -l | grep %@", self.devUdid]];
+    NSLog(@"output = %@",output);
+    if(output.length == 0){
+        return NO;
+    }
+    
+    return YES;
+}
+
+- (int) getDeviceCount {
+    int nCount = 0;
+    NSString * result = [Utility launchTask:@"/usr/local/bin/idevice_id" arguments:@[@"-l"]];
+    
+    if( 0 == result.length )
+        return nCount;
+    
+    NSArray * datas = [result componentsSeparatedByString:@"\n"];
+    for( NSString * keyValue in datas ) {
+        if( 0 == keyValue.length )
+            continue;
+        
+        ++nCount;
+    }
+    
+    return nCount;
 }
 
 - (void)socket:(GCDAsyncSocket *)sock didWriteDataWithTag:(long)tag {
@@ -244,13 +346,15 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 /// @brief 소켓이 끊어졌을때 인데.. 별로 하는게 없음..
 - (void)socketDidDisconnect:(GCDAsyncSocket *)sock withError:(NSError *)err {
     DDLogWarn(@"%s", __FUNCTION__);
+    DDLogWarn(@"%s__%d",__FUNCTION__,sock.localPort);
+    DDLogWarn(@"%s__%d",__FUNCTION__,listenSocket.localPort);
     
     if (sock == listenSocket) {
 //    if (sock == connectedSocket) {
         DDLogError(@"Disconnected............");
         listenSocket = nil;
         connectedSocket = nil;
-        [self __disconnectPostProcessByDeviceNo:0];
+//        [self __disconnectPostProcessByDeviceNo:0];
     }
     
 //    if( sock == autoListenSocket ) {
@@ -360,7 +464,6 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     }
 }
 
-//mg//
 /// @brief Start Command 를 수신하여 호출됨. 자동화/메뉴얼 동작을 실행시키고 UI 에 로그를 출력함.
 - (void)__processStartConnectionByPacket:(NSData *)packet isManual:(BOOL)manual deviceNo:(int)argDeviceNo {
     DDLogDebug(@"%s", __FUNCTION__);
@@ -375,30 +478,27 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         [self commonResponse:NO deviceNo:argDeviceNo];
     } else {
         dispatch_async(infoQueue, ^(void){
-//            [itemInfo launchResource];
-            
             [itemInfo startAgentManual:manual];
-
-            //onycap
-            /*NSTask *task = [[NSTask alloc] init];
-            task.launchPath = @"/bin/bash";
-            task.arguments = @[@"-l", @"-c", @"open -a Onycap"];
-            
-            @try {
-                [task launch];
-                DDLogInfo(@"launch onycap");
-            } @catch (NSException *e) {
-                DDLogError(@"onycap launch error = %@", e.reason);
-                
-                //[self commonResponse:NO deviceNo:argDeviceNo];
-                //[itemInfo stopAgent];
-                //return;
-            }*/
-            
+//            [self performSelector:@selector(aliveCheck:) withObject:argDeviceNo afterDelay:60.0];
+//            [self performSelectorOnMainThread:@selector(aliveCheck:) withObject:nil waitUntilDone:YES];
             _bStopTask = false;
         });
     }
 }//__processStartConnectionByPacket
+
+-(void)aliveCheck:(int)argDeviceNo{
+     ConnectionItemInfo* itemInfo = [self.mainController connectionItemInfoByDeviceNo:argDeviceNo];
+    if(itemInfo == nil){
+       [self commonResponse:NO reqCmd:CMD_STATUS msg:@"NO" deviceNo:argDeviceNo];
+    }else{
+       BOOL bStatus = [itemInfo deviceGetStatus];
+        if(bStatus){
+            NSLog(@"I'm ALive");
+        }else{
+            NSLog(@"I'm DEAD");
+        }
+    }
+}
 
 //mg//
 /*- (void)__processStartConnectionByPacket:(NSData *)packet isManual:(BOOL)manual deviceNo:(int)argDeviceNo {
@@ -457,43 +557,77 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 //            [itemInfo terminateApp];
 //            dispatch_semaphore_signal(syncSem);
             
-            [itemInfo hardKeyEvent:3 longpress:0];//mg//앱 실행 화면에서 삭제하면 검정 화면이 표시되는 사례가 있으므로, 홈화면으로 바꾸고 삭제
-            [itemInfo hardKeyEvent:3 longpress:0];//mg//앱 실행 화면에서 삭제하면 검정 화면이 표시되는 사례가 있으므로, 홈화면으로 바꾸고 삭제
+            [itemInfo hardKeyEvent:3 longpress:0 andReturn:NO];//mg//앱 실행 화면에서 삭제하면 검정 화면이 표시되는 사례가 있으므로, 홈화면으로 바꾸고 삭제
+            [itemInfo hardKeyEvent:3 longpress:0 andReturn:NO];//mg//앱 실행 화면에서 삭제하면 검정 화면이 표시되는 사례가 있으므로, 홈화면으로 바꾸고 삭제
             
-            [itemInfo stopAgent];
-
-//            if( [[itemInfo getLaunchBundleId] length] ) {
-//                const uint8_t * clear = (packet ? (uint8_t *)packet.bytes : NULL);
-//                if( clear ) {
-//                    if ((int)clear[0] == 0)// packet 이 존재하며, clear == 0 인 상태 앱을 삭제 하지 않는다.
-//                        return;
-//                }
-//
-//                 // !packet 기존 아무것도 없을때, clear == 1 clear 명령을 받을 때
-//                [itemInfo removeInstalledApp:NO];          // Clear 명령을 받으면 resetAppium 의 결과과 도달할 때 까지 기대렸다가 호출되는것으로 변경됨.
-//            }//if : 시작할 때 앱 설치
+//            [itemInfo stopAgent];
+//            [itemInfo removeInstalledApp:NO];          // Clear 명령을 받으면 resetAppium 의 결과과 도달할 때 까지 기대렸다가 호출되는것으로 변경됨.
+            [self disconnectSocket];
+            
             const uint8_t * clear = (packet ? (uint8_t *)packet.bytes : NULL);
             if( clear ) {
-                if ((int)clear[0] == 0)// packet 이 존재하며, clear == 0 인 상태 앱을 삭제 하지 않는다.
+                if ((int)clear[0] == 0){// packet 이 존재하며, clear == 0 인 상태 앱을 삭제 하지 않는다.
                     //Manager Restart swccc
                     //매우 좋지 않은 방법이다 해결방안이 있으면 해결하는 것이 제일 좋다
-                    [Utility restartManager];
-                    exit(0);
+                    [self restartCheck];
                     return;
+                }
             }
-            
+
             // !packet 기존 아무것도 없을때, clear == 1 clear 명령을 받을 때
-            [itemInfo removeInstalledApp:NO];          // Clear 명령을 받으면 resetAppium 의 결과과 도달할 때 까지 기대렸다가 호출되는것으로 변경됨.
-            
+            // 배포시에 삭제 요망
+//            [itemInfo removeInstalledApp:NO];          // Clear 명령을 받으면 resetAppium 의 결과과 도달할 때 까지 기대렸다가 호출되는것으로 변경됨.
+
             //Manager Restart swccc
             //매우 좋지 않은 방법이다 해결방안이 있으면 해결하는 것이 제일 좋다
-            [Utility restartManager];
-            exit(0);
-            
-            
+            dispatch_async(dispatch_get_main_queue(),^(){
+                [self restartCheck];
+            });
         });//info queue
     }
+//    [Utility restartManager];
 }//processEndConnectionByPacket
+
+-(void)killManagePort:(int)port{
+    @try
+    {
+        NSString *script = [NSString stringWithFormat:@"kill `lsof -t -i:%d`", port];
+        system([script UTF8String]);
+        system([@"killall -z lsof" UTF8String]);
+    }
+    @catch (NSException *exception)
+    {
+        NSLog(@"########################################################################");
+        NSLog(@"%@", exception.description);
+        NSLog(@"########################################################################");
+    }
+
+}
+
+-(void)restartCheck{
+    [self dcDisconnect];
+    BOOL bRestart = [[NSUserDefaults standardUserDefaults] boolForKey:MANAGERRESTART];
+    if(bRestart){
+//        [Utility restartManager];
+//        [self performSelectorInBackground:@selector(exitManager) withObject:nil];
+        exit(0);
+    }
+}
+
+-(void)exitManager{
+    exit(0);
+}
+
+-(void)dcDisconnect{
+    if(listenSocket != nil){
+        [listenSocket disconnect];
+        listenSocket = nil;
+    }
+    if(autoListenSocket != nil){
+        [autoListenSocket disconnect];
+        autoListenSocket = nil;
+    }
+}
 
 
 /// @brief wakeup command 수신되어 호출되는데 iPhne 은 해당 기능이 없어 테스트 하는 용도로 사용함. 배포시 아래 함수 내용을 주석처리 해야함.
@@ -568,16 +702,20 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         if (_bStopTask)
             return;
         
+        
         if (cmd == CMD_TOUCH_DOWN) {
             DDLogInfo(@"===== DOWN ====== tap %d, %d =============", (short)nX, (short)nY);
+            _nDragCount = 0;
             [itemInfo doTouchStartAtX:nX andY:nY];
         } else if (cmd == CMD_TOUCH_MOVE) {
 //            DDLogInfo(@"===== MOVE ====== tap %d, %d =============", (short)nX, (short)nY);
             [itemInfo doTouchMoveAtX:nX andY:nY];
+            
         } else if (cmd == CMD_TOUCH_UP) {
             DDLogInfo(@"===== UP ====== tap %d, %d =============", (short)nX, (short)nY);
+            _nDragCount = 0;
             [itemInfo doTouchEndAtX:nX andY:nY];
-            [blockSelf commonResponse:YES deviceNo:argDeviceNo];//mg//
+//            [blockSelf commonResponse:YES deviceNo:argDeviceNo];//mg//
         }
     });
 }
@@ -680,8 +818,8 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         if (_bStopTask)
             return;
 
-        [itemInfo hardKeyEvent:nKey longpress:(int)nType];
-        [self commonResponse:YES deviceNo:argDeviceNo];//mg//
+        [itemInfo hardKeyEvent:nKey longpress:(int)nType andReturn:YES];
+//        [self commonResponse:YES deviceNo:argDeviceNo];
     });
 }
 
@@ -726,20 +864,16 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 /// @brief ResourceMornitor App 을 WebDriverAgent 를 실행한뒤 BundleID 로 실행한뒤 OpenURL 기능을 사용하는게 좋을거 같음.
 /// @param packet url 정보
 - (void)__processOpenURLByPacket:(NSData *)packet deviceNo:(int)argDeviceNo {
-#ifdef DEBUG
-    DDLogWarn(@"%s, %d", __FUNCTION__, argDeviceNo);
-#endif
+    DDLogDebug(@"%s", __FUNCTION__);
     
     __block __typeof__(self) blockSelf = self;
-    dispatch_async(infoQueue, ^(void) {
+    dispatch_async(infoQueue, ^(void){
+        NSString *resultURL = [[NSString alloc] initWithData:packet encoding: NSUTF8StringEncoding];
+        //DDLogVerbose(@"===== CMD_INSTALL %@  ============ %d", path, argDeviceNo);
+        DDLogInfo(@"install : %@", resultURL);
 
-        ConnectionItemInfo* itemInfo = [blockSelf.mainController connectionItemInfoByDeviceNo:argDeviceNo];
-        if(itemInfo == nil) return;
-        
-        NSString *url = [[NSString alloc] initWithData:packet encoding: NSUTF8StringEncoding];
-        DDLogWarn(@"===== URL : %@  ============ %d", url, argDeviceNo);
-        
-        if ((url == nil) || ([url length] <= 0)) {
+        if ((resultURL == nil) || ([resultURL length] <= 0)) {
+            [blockSelf commonResponse:NO deviceNo:argDeviceNo];
             return;
         }
         
@@ -747,12 +881,42 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         if (_bStopTask)
             return;
 
-        NSString* safari = [NSString stringWithFormat:@"%@|%@",CMD_SAFARI,url];
-        
-        [itemInfo sendOpenURL:url];
-    });
-    
-//    [self commonResponse:NO deviceNo:argDeviceNo];
+        ConnectionItemInfo* itemInfo = [blockSelf.mainController connectionItemInfoByDeviceNo:argDeviceNo];
+        if(itemInfo != nil) {
+            [itemInfo sendOpenURL:resultURL];
+        }else{
+            //swccc 실패했을 경우 출력
+            [blockSelf commonResponse:NO deviceNo:argDeviceNo];
+        }
+    });//infoQueue
+
+//#ifdef DEBUG
+//    DDLogWarn(@"%s, %d", __FUNCTION__, argDeviceNo);
+//#endif
+//
+//    __block __typeof__(self) blockSelf = self;
+//    dispatch_async(infoQueue, ^(void) {
+//
+//        ConnectionItemInfo* itemInfo = [blockSelf.mainController connectionItemInfoByDeviceNo:argDeviceNo];
+//        if(itemInfo == nil) return;
+//
+//        NSString *url = [[NSString alloc] initWithData:packet encoding: NSUTF8StringEncoding];
+//        DDLogWarn(@"===== URL : %@  ============ %d", url, argDeviceNo);
+//
+//        if ((url == nil) || ([url length] <= 0)) {
+//            return;
+//        }
+//
+//        //mg//
+//        if (_bStopTask)
+//            return;
+//
+//        NSString* safari = [NSString stringWithFormat:@"%@|%@",CMD_SAFARI,url];
+//
+//        [itemInfo sendOpenURL:url];
+//    });
+//
+////    [self commonResponse:NO deviceNo:argDeviceNo];
 }
 
 /// @brief Start Monitoring. 리소스 모니터링 시작.
@@ -875,7 +1039,8 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 #ifdef DEBUG
     DDLogWarn(@"%s, %d", __FUNCTION__, argDeviceNo);
 #endif
-    dispatch_async(infoQueue, ^(void){
+    
+//    dispatch_async(infoQueue, ^(void){
         NSString *search = [[NSString alloc] initWithData:packet encoding: NSUTF8StringEncoding];
         DDLogWarn(@"====== START_LOG %@======", search);
         NSArray *infos = [search componentsSeparatedByString:@":"];
@@ -905,7 +1070,6 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             return ;
         }
         
-        
 //        DDLogInfo(@"===== log : %@, %c", logSearch, gLoglvl);
         ConnectionItemInfo* itemInfo = [self.mainController connectionItemInfoByDeviceNo:argDeviceNo];
         if(itemInfo == nil) return;
@@ -913,9 +1077,13 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
         //mg//
         if (_bStopTask)
             return;
-
+    
         [itemInfo startLogSearch:theLogSearch identifier:theLogIdentifier level:theLogLevel];
-    });
+//        :(NSString *)search identifier:(NSString* )identifier level: (char)level
+//        [self.mainController logStart:[self udidByDeviceNo:argDeviceNo]];
+//        [self.mainController logStart:[self udidByDeviceNo:argDeviceNo] logSearch:theLogSearch identifier:theLogIdentifier level:theLogLevel];
+//    });
+    
 }
 
 /// @brief 로그 전송 종료.
@@ -926,6 +1094,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     ConnectionItemInfo* itemInfo = [self.mainController connectionItemInfoByDeviceNo:argDeviceNo];
     if(itemInfo == nil) return;
     [itemInfo stopLog];
+//    [self.mainController logStop];
 }
 
 //mg//
@@ -941,19 +1110,23 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             return;
         
         NSString * strAppList = @"";
-//        NSArray *appList = [((NSArray *)[itemInfo getAppListForDevice:NO]) copy];
-        NSMutableArray* appList = (NSMutableArray *)[itemInfo getAppListForDevice:NO];
-        
+        NSArray *appList = [((NSArray *)[itemInfo getAppListForDevice:NO]) copy];
+//        NSMutableArray* appList = (NSMutableArray *)[itemInfo getAppListForDevice:NO];
+//        NSMutableArray* appList = nil;
+        NSLog(@"appList = %@",appList);
         if (appList != nil)
             strAppList = [appList componentsJoinedByString:@"\n"];
         
-        NSData* resData = [strAppList dataUsingEncoding:NSUTF8StringEncoding];
-        NSData* packetData = [self makePacket:CMD_SEND_APPLIST data:resData deviceNo:argDeviceNo];
-        
-        GCDAsyncSocket * targetSocket = [self getSendTargetSocket:argDeviceNo];
-        //send
-        if(targetSocket.isConnected )
-            [targetSocket writeData:packetData withTimeout:-1 tag:0];
+        if(strAppList != nil){
+            NSData* resData = [strAppList dataUsingEncoding:NSUTF8StringEncoding];
+            NSData* packetData = [self makePacket:CMD_SEND_APPLIST data:resData deviceNo:argDeviceNo];
+            
+            GCDAsyncSocket * targetSocket = [self getSendTargetSocket:argDeviceNo];
+            //send
+            if(targetSocket.isConnected )
+                [targetSocket writeData:packetData withTimeout:-1 tag:0];
+
+        }
     });
 }
 
@@ -1006,9 +1179,15 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 //            [itemInfo resetDevice];
 //            [itemInfo waitForServerStop];
             
-            [itemInfo removeInstalledApp:YES];
+            BOOL bResult;
+            bResult = [itemInfo removeInstalledApp:YES];
+            if(bResult){
+                [self commonResponseClear:YES msg:@"" deviceNo:argDeviceNo];
+            }else{
+                [self commonResponseClear:NO msg:@"" deviceNo:argDeviceNo];
+            }
             
-            [self commonResponseClear:YES msg:@"" deviceNo:argDeviceNo];
+            
         }
     });
 }
@@ -1234,6 +1413,8 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 //            [[CommunicatorWithDC sharedDCInterface] commonResponse:YES reqCmd:CMD_RESPONSE msg:@"" deviceNo:argDeviceNo];
             // 흠... 이상함.. 예전엔 설치후 바로 실행했었고, 잘 동작 했었는데.. 지금은 ... 설치후 응답하고, Runapp 이 도착했을때 바로 실행하면... 앱이 실행되다 멈춰버림...
             // 일단.. 이렇게 해두고.. 나중에... 시간 되면.. 그때 알아봄.. 그때가 올런지...
+            [itemInfo hardKeyEvent:3 longpress:0 andReturn:NO];
+            
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0f * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 NSString * bundleId = [[NSString alloc] initWithData:packet encoding:NSUTF8StringEncoding];
                 [itemInfo autoRunApp:bundleId];                
@@ -1270,13 +1451,17 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             [self commonResponse:NO reqCmd:CMD_UNINSTALL msg:@"Device Error" deviceNo:argDeviceNo];
         } else {
             //앱 실행 화면에서 삭제하면 검정 화면이 표시되는 사례가 있으므로, 홈화면으로 바꾸고 삭제
-            [itemInfo hardKeyEvent:3 longpress:0];
+            [itemInfo hardKeyEvent:3 longpress:0 andReturn:NO];
 
             NSString *bundleId = [[NSString alloc] initWithData:packetData encoding:NSUTF8StringEncoding];
-            [itemInfo removeApp:bundleId];
+            BOOL bSuccess = [itemInfo removeApp:bundleId];
             
             //response
-            [self commonResponse:YES reqCmd:CMD_UNINSTALL msg:@"" deviceNo:argDeviceNo];
+            if(bSuccess){
+                [self commonResponse:YES reqCmd:CMD_UNINSTALL msg:@"" deviceNo:argDeviceNo];
+            }else{
+                [self commonResponse:NO reqCmd:CMD_UNINSTALL msg:@"" deviceNo:argDeviceNo];
+            }
         }
     });
 }
@@ -1304,7 +1489,27 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
 
         }
     });
-    
+}
+
+-(void)__terminateActiveApp:(int)argDeviceNo{
+    dispatch_async(infoQueue, ^(void){
+        if(_bStopTask){
+            return;
+        }
+        
+        ConnectionItemInfo* itemInfo = [self.mainController connectionItemInfoByDeviceNo:argDeviceNo];
+        if(itemInfo == nil){
+            [self commonResponse:NO reqCmd:CMD_TERMINATE_APP msg:@"NO" deviceNo:argDeviceNo];
+        }else{
+            BOOL bTerminate = [itemInfo terminateActiveApp];
+            
+            if(bTerminate){
+                [self commonResponse:YES reqCmd:CMD_TERMINATE_APP msg:@"SUCCESS" deviceNo:argDeviceNo];
+            }else{
+                [self commonResponse:NO reqCmd:CMD_TERMINATE_APP msg:@"FALSE" deviceNo:argDeviceNo];
+            }
+        }
+    });
 }
 
 /*
@@ -1325,6 +1530,7 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
     DDLogInfo(@"packet from DC = %d", (int)cmd);
     //DC창에 명령어 로그 추가
 //    DCLog(@"%d",(int)cmd);
+    //##################################################################################################################
     
     NSString* message = [NSString stringWithFormat:@"%d",(int)cmd];
     [[NSNotificationCenter defaultCenter] postNotificationName:DEVICE_LOG object:message userInfo:nil];
@@ -1465,6 +1671,11 @@ static CommunicatorWithDC *mySharedDCInterface = nil;
             break;
         case CMD_STATUS:{
             [self __processStatusByPacket:data deviceNo:argDeviceNo];
+        }
+            break;
+            
+        case CMD_TERMINATE_APP:{
+            [self __terminateActiveApp:argDeviceNo];
         }
             break;
         default: {

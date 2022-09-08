@@ -32,6 +32,7 @@
 
 //#import "ScreenCapture.h"
 #import "CommunicatorWithVPS.h"
+#import <sys/time.h>
 
 #define MAX_LAUNCH_TRY_COUNT        5
 
@@ -58,6 +59,8 @@
 
 // swccc
 @property (nonatomic, strong) NSArray       * deviceInitAppList;
+
+@property (nonatomic, strong) NSMutableArray *deviceInstallAppList;
 
 
 /// @brief  현재 사용하지 않는 타이머
@@ -125,13 +128,14 @@
         _openURL = nil;
         
         _dicBundleIDs = [NSMutableDictionary dictionary];
-        _dicAgentInfos = nil;
+        _agentBuild = nil;
         
         _myComuVps = nil;
         _launchedAppQueue = dispatch_queue_create("LaunchedAppQueueu", NULL);
         
         
         _deviceInitAppList = nil;
+        _deviceInstallAppList = nil;
     }
     return self;
 }
@@ -161,6 +165,10 @@
     } else {
         _connectType = CNNT_TYPE_AUTO;
     }
+//    dispatch_semaphore_t syncSem = dispatch_semaphore_create(0);
+//    dispatch_semaphore_wait(syncSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60.0f * NSEC_PER_SEC)));
+//    dispatch_semaphore_signal(syncSem);
+
     
     [_myAgent settingBeforeLaunch];
 //    [_myAgent launchControlAgent];
@@ -168,28 +176,29 @@
 
 /// @brief      Agent 종료, 관련 타스크 정리 및 메모리 정리
 - (void)stopAgent {
-    DDLogDebug(@"%s", __FUNCTION__);
+    DDLogDebug(@"%s -- (%@)", __FUNCTION__,_deviceInfos.udid);
     
     if( _bInstalling )
         [[CommunicatorWithDC sharedDCInterface] commonResponseForInstall:NO appId:@"Install중 Stop이 들어옴." deviceNo:_deviceInfos.deviceNo];
     
-    [_cmtIProxy stopIProxyTask];
+//    [_cmtIProxy stopIProxyTask];
     [_myAgent finishControlAgent:_dicBundleIDs];
     
-    if (self.myDeviceLog) {
-        [self.myDeviceLog killLogProcess];
-        self.myDeviceLog = nil;
-    }
+//    if (self.myDeviceLog) {
+//        [self.myDeviceLog killLogProcess];
+//        self.myDeviceLog = nil;
+//    }
+
+    
     
     self.openURL = nil;
     self.bConnectedResourceApp  = NO;
-    
+
     if( _dicBundleIDs.count ) {
         [_dicBundleIDs removeAllObjects];
     }
-    
-    [self clearProcess];        // TestForte 작업이 완료되면 정리한다... TestForte 작업중 Manager 를 종료시 이 블록은 호출되지 않아 해당 프로세스들이 완전히 정맇됬는지는 확인을 못하지만, 다음 Manager 실행시 이전에 작업했던 프로세스를 검사하여 정리해주기 때문에 안정적으로 돌아가게 된다.
-    
+
+    [self clearProcess:_deviceInfos.udid andLog:NO];        // TestForte 작업이 완료되면 정리한다... TestForte 작업중 Manager 를 종료시 이 블록은 호출되지 않아 해당 프로세스들이 완전히 정맇됬는지는 확인을 못하지만, 다음 Manager 실행시 이전에 작업했던 프로세스를 검사하여 정리해주기 때문에 안정적으로 돌아가게 된다.
     [self removeDeviceDirectoryFile];
 }
 
@@ -212,6 +221,10 @@
     }
 }
 
+-(BOOL)terminateActiveApp{
+    BOOL bTerminate = [_myAgent terminateApp:@""];
+    return bTerminate;
+}
 
 /// @brief      Agent 를 선택적으로 생성함.
 /// @brief      Instruments 와 WebDriverAgent 로 나뉘면 될텐데.. Appium을 넣은건.. Appium 에서 처리하는 데이터를 로그상으로 확인 할 상황이 생길 수 있어서임...
@@ -221,142 +234,113 @@
 /// @details    통합 문제는 중요도가 떨어지기에 판단은 후임지가 알아서 하시길...
 - (void) initialize {
     DDLogInfo(@"%s -- START", __FUNCTION__);
-    if( nil== _dicAgentInfos ) {
-        DDLogError(@"Agent 정보가 없음!!");
-        return ;
-    }
+//    if( nil== _agentBuild ) {
+//        DDLogError(@"Agent 정보가 없음!!");
+//        return ;
+//    }
+//    
+    DDLogInfo(@"HomeScreen Mode");
+    WebDriverControlAgent * webAgent = [[WebDriverControlAgent alloc] init];
+    webAgent.xctestRun = self.agentBuild;
     
-    NSString * agentMode = [_dicAgentInfos objectForKey:AGENT_MODE_KEY];
+    if(_myAgent)
+        _myAgent = nil;
     
-    if( NSOrderedAscending == [@"9.3" compare:self.deviceInfos.productVersion options:NSNumericSearch] ) {
-        if( [AGENT_MODE_WEBDRIVER isEqualToString:agentMode] ) {
-            DDLogInfo(@"HomeScreen Mode");
-            WebDriverControlAgent * webAgent = [[WebDriverControlAgent alloc] init];
-            webAgent.xctestRun = [_dicAgentInfos objectForKey:XCTEST_RUN_KEY];
-            
-            if(_myAgent)
-                _myAgent = nil;
-            
-            _myAgent = webAgent;
-        } else if ( [AGENT_MODE_APPIUM isEqualToString:agentMode] ) {
-            DDLogInfo(@"Appium Mode");
-            
-            // Appium은 App 을 설치한뒤 앱을 실행하여 시작이 완료되기 때문에 지금과는(홈스크린 부터 시작) 진입부분이 다르다.
-            // WebDriverAgent/Appium 모두 정상동작하는걸 확인했으며, 현재는 Appium 을 사용하기 위해선 진입부분에 대한 수정이 필요하다..
-            // 진입부분에 대안 동작 절차의 차이점은 김선아 선임에게 문의 하면 됩니다.
-            AppiumControlAgent * appAgent = [[AppiumControlAgent alloc] init];
-                    
-            _myAgent = appAgent;
-        }
-        _myResource = [ResourceMornitor highVersionResourceMornitor];
-    } else {
-        if ([AGENT_MODE_INSTRUMENTS isEqualToString:agentMode] ) {
-            DDLogInfo(@"Instruments Mode");
-            _myAgent = [[InstrumentsControlAgent alloc] init];
-        }
-        _myResource = [ResourceMornitor lowVersionResourceMornitor];
-    }
-    
-    if( !_myAgent ) {
-        DDLogError(@"Not Matching AgentMode : %@", agentMode);
-    }
+    _myAgent = webAgent;
+
+    _myResource = [ResourceMornitor highVersionResourceMornitor];
+
     
     _myAgent.customDelegate = self;
     _myAgent.deviceInfos = _deviceInfos;
     _myResource.deviceInfos = _deviceInfos;
-    
-    NSString * captureMode = [_dicAgentInfos objectForKey:SCAPTURE_MODE_KEY];
-    if( [captureMode isEqualToString:SCAPTURE_MODE_POLLING] ) {
-        _myComuVps = [[CommunicatorWithVPS alloc] initWithCaptureMode:[_dicAgentInfos objectForKey:SCAPTURE_MODE_KEY] withDeviceInfos:_deviceInfos withControlAgent:_myAgent];
-        [_myComuVps startVPSSocketServer];
-    }
     
     DDLogInfo(@"%s -- END", __FUNCTION__);
 }
 
 
 /// @brief  남아있는 타스크를 찾아서 강종시킴.
-- (void) clearProcess {
-    DDLogWarn(@"%s, %d", __FUNCTION__, _deviceInfos.deviceNo);
+- (void) clearProcess:(NSString*)udid andLog:(BOOL)bLogClear{
+    DDLogWarn(@"%s, %@", __FUNCTION__, udid);
 //    dispatch_async([[CommunicatorWithDC sharedDCInterface] getDispatchQueue:_deviceInfos.deviceNo], ^(){
-        [self checkAndClearProcess:_deviceInfos.udid];      // appium, idevice, instrument 의 프로세스가 남았는지 확인해서 있으면, 정리한다.
+    [self checkAndClearProcess:udid logClear:bLogClear];      // appium, idevice, instrument 의 프로세스가 남았는지 확인해서 있으면, 정리한다.
 //    });
 }
 
 /// @brief  타스크를 종료했는데.. 남았는경우가 가끔씩 있어 확인사살함. [NSTask terminate] 의 정의를 보면 다음과 같이 되어있음.  "Not always possible. Sends SIGTERM."
-- (void) checkAndClearProcess:(NSString *)name {
-    
-//    NSString * output = [Utility launchTaskFromBash:[NSString stringWithFormat:@"ps -ef | grep %@", _deviceInfos.udid]];
-//    if(output.length > 0){
-//        output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
-//        NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
-//        //    int nCount = arrOut.count;
-//        NSMutableArray * arrPid = [NSMutableArray array];
-//        for( NSString * outputProcessInfos in arrOut ) {
-//            if( 0 == outputProcessInfos.length )
-//                continue;
-//
-//            if( [outputProcessInfos containsString:@"grep "] ) {
-//                continue;
-//            }
-//            NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
-//
-//            if((int)component.count > 3){
-//                [arrPid addObject:[component objectAtIndex:3]];
-//            }
-//            if( arrPid.count ) {
-//                NSString * strPids = [arrPid componentsJoinedByString:@" "];
-//                NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPids];
-//                int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
-//                DDLogWarn(@"Kill Process Result : %d", result);
-//            }
-//        }
-////        if( arrPid.count ) {
-////            NSString * strPids = [arrPid componentsJoinedByString:@" "];
-////            NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPids];
-////            int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
-////            DDLogWarn(@"Kill Process Result : %d", result);
-////        }
-//    }
-    
-    NSString * output = [Utility launchTaskFromBash:[NSString stringWithFormat:@"ps -ef | grep %@", _deviceInfos.udid]];
-    NSLog(@"output = %@",output);
-    if(output.length > 0){
-        output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
-        NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+- (void)checkAndClearProcess:(NSString *)name logClear:(BOOL)bClearLog{
+        
+    NSString * output = [Utility launchTaskFromSh:[NSString stringWithFormat:@"ps -ef | grep %@", _deviceInfos.udid]];
+    NSLog(@"%s -> output (%@)",__FUNCTION__,output);
+    if([output isEqual:[NSNull null]] || output == nil){
+        //HERE RESTART
+        NSLog(@"ERROR output clear");
+//        [[CommunicatorWithDC sharedDCInterface] restartCheck];
+//        [Utility restartManager];
+//        restartcheck
+//        return;
+    }else{
+        if(output.length > 0){
+            output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+            NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
 
-        NSMutableArray * arrPid = [NSMutableArray array];
-        for( NSString * outputProcessInfos in arrOut ) {
-            if( 0 == outputProcessInfos.length )
-                continue;
-            
-            if( [outputProcessInfos containsString:@"grep "] ) {
-                continue;
-            }
-           
-            NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
-            NSLog(@"compoment = %@",component);
-            
-            NSMutableArray* tempArray = [NSMutableArray array];
-            for(NSString* temp in component){
-                if(temp.length > 0){
-                    [tempArray addObject:temp];
-                }else{
+            NSMutableArray * arrPid = [NSMutableArray array];
+            for( NSString * outputProcessInfos in arrOut ) {
+                if( 0 == outputProcessInfos.length )
+                    continue;
+                
+                if( [outputProcessInfos containsString:@"grep "] ) {
+                    continue;
+                }
+               
+                NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
+    //            NSLog(@"compoment = %@",component);
+                
+                NSMutableArray* tempArray = [NSMutableArray array];
+                for(NSString* temp in component){
+                    if(temp.length > 0){
+                        [tempArray addObject:temp];
+                    }else{
+                    }
+                }
+//                NSLog(@"tempArray = %@",tempArray);
+                if((int)tempArray.count > 3){
+                    NSString* strPid = [tempArray objectAtIndex:2];
+                    NSLog(@"strPid = %@",strPid);
+                    if([strPid isEqualToString:@"1"]){
+                        strPid = [tempArray objectAtIndex:1];
+                    }
+                    if([[tempArray objectAtIndex:7] isEqualToString:@"idevicesyslog"] ){
+                        if(bClearLog){
+                            strPid = [tempArray objectAtIndex:1];
+                            NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPid];
+                            int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
+                            DDLogWarn(@"Kill DeviceSysLog Result : %d", result);
+                        }
+//                        [self.myDeviceLog killLogProcess];
+                    }else if([[tempArray objectAtIndex:7] isEqualToString:@"iproxy"]){
+                        NSLog(@"IPROXY ALIVE");
+                    }else if([[tempArray objectAtIndex:7] isEqualToString:@"/opt/homebrew/bin/iproxy"]){
+                        NSLog(@"IPROXY ALIVE");
+                    }else if([[tempArray objectAtIndex:7] isEqualToString:@"/Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild"]){
+                        NSLog(@"xcode alive");
+                    }else{
+                        if([[tempArray objectAtIndex:7] containsString:@"xcodebuild"]){
+                            NSLog(@"xcode는 살려주자고");
+                        }else{
+                            NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPid];
+                            int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
+                            DDLogWarn(@"Kill Process Result : %d", result);
+                        }
+                    }
                 }
             }
-            NSLog(@"tempArray = %@",tempArray);
-            
-            if((int)tempArray.count > 3){
-                NSString* strPid = [tempArray objectAtIndex:2];
-                NSLog(@"strPid = %@",strPid);
-                if([strPid isEqualToString:@"1"]){
-                    strPid = [tempArray objectAtIndex:1];
-                }
-                NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPid];
-                int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
-                DDLogWarn(@"Kill Process Result : %d", result);
-
-            }
+        }else{
+            //재시작
+            NSLog(@"output 값이 없음");
+            [[CommunicatorWithDC sharedDCInterface] dcDisconnect];
+            exit(0);
+//            [Utility restartManager];
         }
     }
 }
@@ -371,8 +355,13 @@
 }
 
 - (void) initDeviceLog {
-    if(_myDeviceLog == nil)
-        _myDeviceLog = [[DeviceLog alloc] initWithDeviceNo:self.deviceInfos.deviceNo UDID:self.deviceInfos.udid withDelegate:self];
+    if(_myDeviceLog == nil){
+//        NSLog(@"%s = (%@)",__FUNCTION__,self.deviceInfos.buildVersion);
+//        NSLog(@"%s = (%@)",__FUNCTION__,self.deviceInfos.productVersion);
+        
+//        _myDeviceLog = [[DeviceLog alloc] initWithDeviceNo:self.deviceInfos.deviceNo UDID:self.deviceInfos.udid withDelegate:self];
+        _myDeviceLog = [[DeviceLog alloc] initWithDeviceNo:self.deviceInfos.deviceNo UDID:self.deviceInfos.udid deviceVersion:self.deviceInfos.productVersion withDelegate:self];
+    }
 }
 
 /// @brief      메니져 경로획득
@@ -449,7 +438,7 @@
 //
 //}
 - (void)launchResource{
-    [_myAgent launchApp:@"com.onycom.ResourceMornitor2"];
+//    [_myAgent launchApp:@"com.onycom.ResourceMornitor2"];
 }
 
 /// @brief      DC 에서 OpenURL 명령을 받았을때 호출되며, 리소스앱을 실행한뒤 완전히 실행될때 까지 대기하다가 전달받은 URL 을 리소스 앱으로 전달하여 이동하게 한다.
@@ -458,40 +447,42 @@
 {
     DDLogWarn(@"%s, %d",__FUNCTION__, _deviceInfos.deviceNo);
     DDLogWarn(@"%d",[_deviceInfos.productVersion intValue]);
-    _openURL = url;
-    if([_deviceInfos.productVersion intValue] > 9){
-        __block __typeof__(self) blockSelf = self;
-        NSString * commandString = [NSString stringWithFormat:@"idevicedebug run %@", @"com.apple.test.OnyAgent-Runner"];
-        
-        NSTask * launchTask = [[NSTask alloc] init];
-        launchTask.launchPath = @"/bin/bash";
-        launchTask.arguments = @[@"-l", @"-c", commandString];
-        
-        NSPipe * outputPipe = [[NSPipe alloc] init];
-        [launchTask setStandardOutput:outputPipe];
-        NSFileHandle * outputHandle = [outputPipe fileHandleForReading];
-        
-        //mg//s
-        if( [NSThread isMainThread] ) {
-            [launchTask launch];
-        } else {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [launchTask launch];
-            });
-        }
-        //mg//e
-
-        //mg//[launchTask launch];
-        
-        NSLog(@"url = %@",url);
-//        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self SafariOpen:url];
-        });
-       
-    }else{
-        [_myResource launchResourceMornitor];
-    }
+    
+    [self.myAgent sendKaKaoResult:url];
+//    _openURL = url;
+//    if([_deviceInfos.productVersion intValue] > 9){
+//        __block __typeof__(self) blockSelf = self;
+//        NSString * commandString = [NSString stringWithFormat:@"idevicedebug run %@", @"com.apple.test.OnyAgent-Runner"];
+//
+//        NSTask * launchTask = [[NSTask alloc] init];
+//        launchTask.launchPath = @"/bin/bash";
+//        launchTask.arguments = @[@"-l", @"-c", commandString];
+//
+//        NSPipe * outputPipe = [[NSPipe alloc] init];
+//        [launchTask setStandardOutput:outputPipe];
+//        NSFileHandle * outputHandle = [outputPipe fileHandleForReading];
+//
+//        //mg//s
+//        if( [NSThread isMainThread] ) {
+//            [launchTask launch];
+//        } else {
+//            dispatch_async(dispatch_get_main_queue(), ^{
+//                [launchTask launch];
+//            });
+//        }
+//        //mg//e
+//
+//        //mg//[launchTask launch];
+//
+//        NSLog(@"url = %@",url);
+////        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+//        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+//            [self SafariOpen:url];
+//        });
+//
+//    }else{
+//        [_myResource launchResourceMornitor];
+//    }
     // 1초 단위로 10초동안 Safari 가 실행되었는지 확인하여 대기하다가 Safari 실행되었으면 전달한 URL로 이동하게 한다.
 //    [self waitforLaunchedSafariWithURL:url withCount:10];
    
@@ -654,6 +645,7 @@
 
 - (void) didDisconnectedFromResourceApp {
     self.bConnectedResourceApp = NO;
+    
 }
 
 #pragma mark - <ControlAgent Delegate>
@@ -662,45 +654,105 @@
 - (void) agentCtrlLaunchSuccessed {
     DDLogDebug(@"%s", __FUNCTION__);
     
+//    [self.myAgent launchAppWithBundleID:@"com.apple.mobilesafari"];
+    
+    if(_deviceInitAppList != nil)
+        _deviceInitAppList = nil;
+    
+    if(_deviceInstallAppList != nil)
+        _deviceInstallAppList = nil;
+    
+    //########################################################
     _deviceInitAppList = [((NSArray *)[self getAppListForDevice:NO]) copy];
-        
-    //resource app 화면 표시됨//
-    [_cmtIProxy startIProxyTask];       // ResourceMornitor App 과 통신을 하기 위한 iProxy 를 실행한다.
+    NSLog(@"LIST = %@",_deviceInitAppList);
+//    for(int i = 0; i<self.deviceInitAppList.count; i++){
+//        NSString* temp = [self.deviceInitAppList objectAtIndex:i];
+//        temp = [[temp componentsSeparatedByString:@"|"] objectAtIndex:0];
+////        NSLog(@"%@ and %@",temp,RESOURCEAPP);
+//        if([temp isEqualToString:RESOURCEAPP]){
+//            // 리소스 앱을 연결한다.
+//            [self.myAgent launchApp:RESOURCEAPP];
+//            break;
+//        }
+//    }
+//    [self.myAgent launchApp:RESOURCEAPP];
+    
+    [self.myAgent homescreen];
+
+    if([_deviceInitAppList containsObject:RESOURCEAPP]){
+        NSLog(@"리소스앱이 있음");
+        [self.myAgent launchAppWithBundleID:RESOURCEAPP];
+    }else{
+        NSLog(@"리소스앱이 없음");
+    }
+    
+    
+    [self.myAgent homescreen];
+//
     
     //(Log를 시작할 때마다 로그를 출력하면 로그가 중복되어, 디바이스 연결시에 로그 출력을 시작하고 로그 출력 커맨드가 왔을 때 로그를 D.C로 전송)
     [self initDeviceLog];      // App 이 실행된 정보(BundleID)를 획득해야 하기 때문에 자동화/메뉴얼 구분없이 실행되어야 함.
-    [self.myDeviceLog startLogAtFirst];
+    //swccc
+//    [self.myDeviceLog startLogAtFirst];
  
-    [[CommunicatorWithDC sharedDCInterface] sendResponse:YES message:self.deviceInfos.productVersion deviceNo:self.deviceInfos.deviceNo];
+//    [[CommunicatorWithDC sharedDCInterface] sendResponse:YES message:self.deviceInfos.productVersion deviceNo:self.deviceInfos.deviceNo];
     
     // 아래의 2개중 한개만 있으면 됨..
+    int nPortNum = RESOURCE_PORT + self.deviceInfos.deviceNo;
+//    NSString * output = [Utility launchTaskFromBash:[NSString stringWithFormat:@"ps -ef | grep %d", nPortNum]];
+    NSString * output = [Utility launchTaskFromSh:[NSString stringWithFormat:@"ps -ef | grep %d", nPortNum]];
+    if(([output rangeOfString:[NSString stringWithFormat:@"%d",nPortNum]].location == NSNotFound) || output == nil || [output rangeOfString:@"iproxy"].location == NSNotFound){
+        NSLog(@"iproxy resource is died");
+        [_cmtIProxy startIProxyTask];       // ResourceMornitor App 과 통신을 하기 위한 iProxy 를 실행한다.
+    }else{
+        NSLog(@"iproxy resource is alive");
+    }
+    //resource app 화면 표시됨//
+//     if(_cmtIProxy == nil){
+//
+//    }else{
+//        [_cmtIProxy startIProxyTask];       // ResourceMornitor App 과 통신을 하기 위한 iProxy 를 실행한다.
+//    }
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3f * NSEC_PER_SEC)), dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0), ^{
         [_cmtIProxy connectResourceMornitor];
     });
+//
     
-    //홈화면부터 시작하기 위하여 190218 swccc
-    if([self.deviceInfos.productVersion intValue] > 11.5){
-        NSLog(@"######## VERSION 12 = %@ ##############",self.deviceInfos.productVersion);
-        [self.myAgent homescreen];
-    }else{
-        NSLog(@"######## VERSION 12 UNDER = %@ ##############",self.deviceInfos.productVersion);
-    }
-        
+    [[CommunicatorWithDC sharedDCInterface] sendResponse:YES message:self.deviceInfos.productVersion deviceNo:self.deviceInfos.deviceNo];
     
-    //display
+}//agentCtrlLaunchSuccessed
+
+#pragma mark - <ControlAgent Delegate>
+//mg//
+/// @brief  Agent 의 실행이 성공함. (Appium, WebDriverAgent, Instruments) DC 로 Start 에 대한 성공을 응답한다.
+-(void)agentCtrlRelaunchSuccess{
+    [self.myAgent homescreen];
     NSString* ratio = [NSString stringWithFormat:@"%.1f", self.deviceInfos.ratio];
     NSDictionary* dict = [[NSDictionary alloc] initWithObjectsAndKeys:self.deviceInfos.udid,@"UDID"
                           ,self.deviceInfos.deviceName, @"NAME"
                           ,self.deviceInfos.productVersion,@"VERSION"
                           ,ratio, @"RATIO"
                           , nil];
+
+//    [self.myAgent launchApp:RESOURCEAPP];
+//    
+//    [self.myAgent homescreen];
+    //resource app 화면 표시됨//
+    [_cmtIProxy startIProxyTask];       // ResourceMornitor App 과 통신을 하기 위한 iProxy 를 실행한다.
     
+    //(Log를 시작할 때마다 로그를 출력하면 로그가 중복되어, 디바이스 연결시에 로그 출력을 시작하고 로그 출력 커맨드가 왔을 때 로그를 D.C로 전송)
+    [self initDeviceLog];      // App 이 실행된 정보(BundleID)를 획득해야 하기 때문에 자동화/메뉴얼 구분없이 실행되어야 함.
+    [self.myDeviceLog startLogAtFirst];
     //deviceLog정보를 UI로 보여줌
     dispatch_async(dispatch_get_main_queue(), ^{
         // code here
         [[NSNotificationCenter defaultCenter] postNotificationName:DEVICE_CONNECT object:self userInfo:dict];
+//        [[CommunicatorWithDC sharedDCInterface] sendResponse:YES message:self.deviceInfos.productVersion deviceNo:self.deviceInfos.deviceNo];
+        
     });
-}//agentCtrlLaunchSuccessed
+    [[CommunicatorWithDC sharedDCInterface] sendResponse:YES message:self.deviceInfos.productVersion deviceNo:self.deviceInfos.deviceNo];
+}
 
 //mg//
 /*- (void) agentCtrlLaunchSuccessed {
@@ -738,7 +790,51 @@
     DDLogInfo(@"%s", __FUNCTION__);
     [[CommunicatorWithDC sharedDCInterface] commonResponse:NO deviceNo:self.deviceInfos.deviceNo];
     
-    [self stopAgent];
+//    [self stopAgent];
+//    [self relaunchManager];
+    [[CommunicatorWithDC sharedDCInterface] dcDisconnect];
+    exit(0);
+//    [[CommunicatorWithDC sharedDCInterface] restartCheck];
+//    [Utility restartCheck];
+}
+
+-(void) relaunchManager{
+    NSString* path = [[NSBundle mainBundle] bundlePath];
+
+    NSString* cmd = [NSString stringWithFormat:@"open -n %@", path];
+
+    [self runCommand:cmd];
+
+    exit(0);
+}
+-(NSString*)runCommand:(NSString*)commandToRun;
+{
+   NSTask *task;
+   task = [[NSTask alloc] init];
+   [task setLaunchPath: @"/bin/sh"];
+
+   NSArray *arguments = [NSArray arrayWithObjects:
+                         @"-c" ,
+                         [NSString stringWithFormat:@"%@", commandToRun],
+                         nil];
+   NSLog(@"run command: %@",commandToRun);
+   [task setArguments: arguments];
+
+   NSPipe *pipe;
+   pipe = [NSPipe pipe];
+   [task setStandardOutput: pipe];
+
+   NSFileHandle *file;
+   file = [pipe fileHandleForReading];
+
+   [task launch];
+
+   NSData *data;
+   data = [file readDataToEndOfFile];
+
+   NSString *output;
+   output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
+   return output;
 }
 
 /// @brief  앱 실행이 완료됨.
@@ -770,20 +866,12 @@
         if(_deviceInitAppList == nil){
             DDLogWarn(@"_deviceInitAppList null");
         }else{
-            DDLogWarn(@"%@",  _deviceInitAppList);
-            
-            for(int i = 0; i<_deviceInitAppList.count; i++){
-                NSString* temp = [_deviceInitAppList objectAtIndex:i];
-                NSString* temp2 = [[temp componentsSeparatedByString:@"|"] objectAtIndex:0];
-                
-                if([temp2 isEqualToString:self.myAgent.launchBundleId]){
-                    self.myAgent.launchAppName = [[temp componentsSeparatedByString:@"|"] objectAtIndex:1];
-                }
-            }
+            DDLogWarn(@"deviceAppList = %@",  _deviceInitAppList);
         }
 
         //추후 선아 수정 요청 가능성 1%있음
-        responseName = [NSString stringWithFormat:@"%@\n%@", self.myAgent.launchAppName, self.myAgent.launchBundleId];
+//        responseName = [NSString stringWithFormat:@"%@\n%@", self.myAgent.launchAppName, self.myAgent.launchBundleId];
+        responseName = [NSString stringWithFormat:@"%@",self.myAgent.launchBundleId];
     }
     
     // 중요 !! Manual 모드일경우, RunApp 에 의해 설치된 App 이 실행되지만, Auto 모드일경우 설치된 앱을 바로 실행한다.
@@ -821,7 +909,7 @@
     //mg//[[CommunicatorWithDC sharedDCInterface] commonResponseForInstall:NO appId:temp deviceNo:_deviceInfos.deviceNo];
     
     [[CommunicatorWithDC sharedDCInterface] commonResponseForInstall:NO appId:description deviceNo:_deviceInfos.deviceNo];//mg//
-    // 1초 뒤 DeviceDisconnected 를 보낸다.
+    // 1초 뒤 ved 를 보낸다.
 }
 
 /// @brief  Install 명령에 Safari 실행이 들어와 WebDriverAgent 를 실행한뒤 바로 ResourceMornitor 앱을 실행시킨경우, WebDriverAgent 가 종료되면서 ResourceMornitor App 이 종료됨.
@@ -840,13 +928,12 @@
     
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     
-    int nPortNum = _deviceInfos.deviceNo + RESOURCE_PORT;
+//    int nPortNum = _deviceInfos.deviceNo + RESOURCE_PORT;
 //    [self clearIProxy:nPortNum];
-    [_cmtIProxy stopIProxyTask];
+//    [_cmtIProxy stopIProxyTask];
     self.bConnectedResourceApp = NO;
     [self stopAgent];
 }
-
 
 #pragma mark - <Timer>
 /// @brief  Standalone 기능이라 현재는 중요하지 않으며... 해당 기능을 활성화 할때 많은 수정이 필요하다. 지금은 사용하지 않는 peartalk 와 관련이 있다.
@@ -915,8 +1002,11 @@
 
 /// @brief  로그 검색 시작   문제점은 DeviceLog.m 파일에 기술해놨음.
 - (void)startLogSearch:(NSString *)search identifier:(NSString* )identifier level: (char)level{
-    if(self.myDeviceLog == nil)
-        self.myDeviceLog = [[DeviceLog alloc] initWithDeviceNo:_deviceInfos.deviceNo UDID:_deviceInfos.udid withDelegate:self];
+//    if(self.myDeviceLog == nil){
+////        self.myDeviceLog = [[DeviceLog alloc] initWithDeviceNo:_deviceInfos.deviceNo UDID:_deviceInfos.udid withDelegate:self];
+//        self.myDeviceLog = [[DeviceLog alloc] initWithDeviceNo:self.deviceInfos.deviceNo UDID:self.deviceInfos.udid deviceVersion:self.deviceInfos.productVersion withDelegate:self];
+//
+//    }
     
     NSString * searchName = nil, * searchBundleID = nil;
     
@@ -929,12 +1019,93 @@
     }
     
     [self.myDeviceLog startLog:search identifier:identifier level:level bundleID:searchBundleID appName:searchName];
+//    [self startLog:search identifier:identifier level:level bundleID:searchBundleID appName:searchName];
+    
+}
+
+- (void)startLog:(NSString *)search identifier:(NSString* )identifier level: (char)level bundleID:(NSString *)bundleID appName:(NSString *)appName{
+    
+    if(self.logTask != nil){
+       self.logTask = nil;
+   }
+   self.logTask = [[NSTask alloc] init];
+   
+//   NSString * commandString = [NSString stringWithFormat:@"idevicesyslog -u %@ -K -q", _deviceInfos.udid];
+    NSString* cpu = [Utility cpuHardwareName];
+    if([cpu isEqualToString:@"x86_64"]){
+        NSString * commandString = [NSString stringWithFormat:@"idevicesyslog -u %@", _deviceInfos.udid];
+       self.logTask.launchPath = @"/bin/sh";
+       self.logTask.arguments = @[@"-l", @"-c", commandString];
+    }else{
+
+        self.logTask.launchPath = @"/opt/homebrew/bin/idevicesyslog";
+        self.logTask.arguments = @[@"-u",
+                                   _deviceInfos.udid];
+    }
+   
+//        NSPipe* pipe = [NSPipe pipe];
+   if(self.pipe != nil){
+       self.pipe = nil;
+   }
+   self.pipe = [NSPipe pipe];
+   [self.logTask setStandardOutput:self.pipe];
+   
+   
+   [self.logTask launch];
+   
+   // BlockSelf 를 사용하면 setReadabilityHandler 안으로 들어가지 못함.. 왜 그런지는 확인해봐야 함..
+   [[self.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
+   self.pipeNotiObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSFileHandleDataAvailableNotification object:[self.pipe fileHandleForReading] queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+       
+       DDLogVerbose(@"addObserverForName");
+
+       [[self.pipe fileHandleForReading] setReadabilityHandler:^(NSFileHandle *file) {
+           NSData * output = [file availableData];
+           if( [self respondsToSelector:@selector(readData:withHandler:)] ) {
+               if(output.length > 0){
+                   [self readData:output withHandler:self];
+                   [[self.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
+               }else{
+                   [[NSNotificationCenter defaultCenter] removeObserver:self.pipeNotiObserver];
+                                           
+                   [self.pipe removeObserver:self.pipeNotiObserver];
+                   [self.pipe closeFile];
+                   self.pipeNotiObserver = nil;
+                   
+               }
+           }
+       }];
+   }];
+    __weak typeof(self) weakSelf = self;
+   [self.logTask setTerminationHandler:^(NSTask *task) {
+       // do your stuff on completion
+       
+       @try {
+           [weakSelf.logTask.standardOutput fileHandleForReading].readabilityHandler = nil;
+       } @catch (NSException *exception) {
+           NSLog(@"standardOutput except = %@",exception.description);
+       }
+
+       @try {
+           [weakSelf.logTask.standardError fileHandleForReading].readabilityHandler = nil;
+       } @catch (NSException *exception) {
+           NSLog(@"standardOutput except = %@",exception.description);
+       }
+   }];
+}
+
+- (void) readData:(NSData *)readData withHandler:(id)handler {
+    NSString *outStr = [[NSString alloc] initWithData:readData encoding:NSUTF8StringEncoding];
+//    DDLogInfo(@"====== outStr===== %@", outStr);//manage
+
+//    [self manageLog:outStr];
 }
 
 /// @brief  로그 전송 중지.
 - (void)stopLog{
     if(self.myDeviceLog == nil) return;
     [self.myDeviceLog stopLog];
+    
 }
 
 
@@ -947,8 +1118,8 @@
 /// @todo   AVCaptureSession 이 아닌 다른 방법으로 미러링 하는 방식을 찾아봐야 함.
 /// @todo   현재 찾아본 방법은 Airplay 앱을 만들어 idevice 의 Airplay를 연결해 미러링 영상을 가져와 iproxy 로 USB 터널링을 한뒤 소켓통신을 하는거임..
 /// @todo   https://brunch.co.kr/@aw2sum/40 에 나와있는 앱의 동작 방식이며, 개발자가 년간 $60,00 라이센스 비용을 요구함.
-- (void)hardKeyEvent:(int)nKey longpress:(int)nType {
-    [_myAgent hardKeyEvent:nKey longpress:nType];
+- (void)hardKeyEvent:(int)nKey longpress:(int)nType andReturn:(BOOL)bResponse{
+    [_myAgent hardKeyEvent:nKey longpress:nType andReturn:bResponse];
 }
 
 /// @brief  idevice 의 화면정보를 XML 로 추출하여 DC 로 전송함.
@@ -981,8 +1152,8 @@
         
 //        NSMutableURLRequest* request= [[NSMutableURLRequest alloc] init];
 //        [request setURL:[NSURL URLWithString:url]];
-        
-        NSMutableURLRequest * request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:url] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:30.0f];
+        //200424 업로드 타임아웃 변경
+        NSMutableURLRequest * request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:url] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:60.0f];
 //        NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:30.0f];
         [request setHTTPMethod:@"POST"];
         NSString *boundary = @"---------------------------14737809831466499882746641449";
@@ -1056,6 +1227,21 @@
         return ;
     }
     
+//    NSString * strAppList = @"";
+//    NSMutableArray* appList = (NSMutableArray *)[self getAppListForDevice:NO];
+//    if (appList != nil)
+//        strAppList = [appList componentsJoinedByString:@"\n"];
+    
+//    NSLog(@"AppList = %@",appList);
+//    NSArray* tempArray = [bundleId componentsSeparatedByString:@"|"];
+//    NSString* appName = [tempArray objectAtIndex:0];
+    
+//    if([strAppList rangeOfString:appName].location == NSNotFound){
+//        [[CommunicatorWithDC sharedDCInterface] commonResponse:NO reqCmd:CMD_RESPONSE msg:@"앱이없다" deviceNo:_deviceInfos.deviceNo];
+//        return;
+//    }else{
+//    }
+    
     DDLogInfo(@"Runapp : %@", bundleId);
     
     [self.dicBundleIDs setObject:@YES forKey:bundleId];
@@ -1064,6 +1250,18 @@
     dispatch_time_t time = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f * NSEC_PER_SEC));
     dispatch_after(time, dispatch_get_main_queue(), ^{
     });
+    
+    BOOL bInstalled = NO;
+    NSString* temp = [[bundleId componentsSeparatedByString:@"|"] objectAtIndex:0];
+    NSArray* arrAppList = [((NSArray *)[self getAppListForDevice:NO]) copy];
+    
+    if([arrAppList containsObject:temp]){
+        bInstalled = YES;
+    }else{
+        bInstalled = NO;
+        [[CommunicatorWithDC sharedDCInterface] commonResponse:NO reqCmd:CMD_RESPONSE msg:@"No Installed App" deviceNo:_deviceInfos.deviceNo];
+        return;
+    }
     
     BOOL result = [_myAgent autoRunApp:bundleId];
     if( !result ) {
@@ -1156,104 +1354,201 @@
 }
 */
 
-/// @brief  앱삭제
-//- (void)removeInstalledApp
-- (void)removeInstalledApp:(BOOL)CMDCLEAR
-{
-    DDLogDebug(@"%s", __FUNCTION__);
-    // 시작했을때 가져온 AppList 에서 현재의 AppList 를 가져와 비교해서 새로 추가된 App 들을 삭제한다.
-    NSMutableDictionary * dicAppList = (NSMutableDictionary *)[self getAppListForDevice:YES];
-//    DDLogDebug(@"current=%d, start=%d", [[dicAppList allKeys] count],  [_deviceInitAppList count]);
-    
-    for( NSString *appInfo in _deviceInitAppList ) {
-        DDLogVerbose(@"exclude = %@", appInfo);
-        [dicAppList removeObjectForKey:appInfo];
-    }
-    
-    NSArray * removeAppList = [dicAppList allKeys];
-    DDLogInfo(@"remove apps = %@", removeAppList);
-    
-    for( NSString * removeAppInfo in removeAppList ) {
-        NSString * appId = nil;
-        NSString * appName = nil;
-        NSArray * component = [removeAppInfo componentsSeparatedByString:@"|"];
-        if( 2 == [component count] ) {
-            appId = [component objectAtIndex:0];
-            appName = [component objectAtIndex:1];      // 필요없지만 그냥 ..
-            
-            DDLogInfo(@"id = %@ and name = %@",appId, appName);
-            
-            if([appId isEqualToString:@"kr.co.metlife.mesia.ipad"] || [appId isEqualToString:@"com.metlife.korea.internal.appcenter"]
-               || [appId isEqualToString:@"com.metlife.korea.internal.metdo"] || [appId isEqualToString:@"com.interplug.Innisfree"]
-               || [appId isEqualToString:@"com.apple.test.OnyAgent-Runner"]
-               || [appId isEqualToString:@"com.apple.test.Don't Touch Me-Runner"]
-               || [appId isEqualToString:@"com.apple.test.WebDriverAgentRunner-Runner"]
-               ) {
-                return;
-            }
-            
-            NSRange aRange = [appId rangeOfString:@"com.apple"];
-            if (aRange.location != NSNotFound)
-            {
-                return;
-            }
-            
-//            NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@ -u %@", appId, _deviceInfos.udid];
-//            NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@", appId];
-//            NSString * output = [Utility launchTaskFromBash:commandString];
-////            DDLogInfo(@"[#### Info ####] rmeove output : \n%@", output);
-//            if([output hasSuffix:@"Complete"]){
-//                [[CommunicatorWithDC sharedDCInterface] commonResponseClear:NO msg:@"Clear Successed" deviceNo:_deviceInfos.deviceNo];
+- (BOOL)removeInstalledApp:(BOOL)CMDCLEAR{
+//    NSArray* arrAppList = [((NSArray *)[self getAppListForDevice:NO]) copy];
+//    if(arrAppList != nil){
+//        for(int i = 0 ; i<arrAppList.count; i++){
+//            NSString* temp = [arrAppList objectAtIndex:i];
+//            if([self.deviceInitAppList containsObject:temp]){
+//            }else{
+//                [self removeApp:temp];
 //            }
-//            DDLogVerbose(@"output = %@", output);
+//        }
+//    }
+//    //초기 앱 정보 삭제
+//    if(CMDCLEAR == NO){
+//        _deviceInitAppList = nil;
+//    }
+    BOOL bResult = YES;
+    NSMutableArray* arrLastAppList = [((NSArray *)[self getAppListForDevice:NO]) copy];;
+    NSLog(@"%@",arrLastAppList);
+    for(NSString* bundleId in arrLastAppList){
+        if([_deviceInitAppList containsObject:bundleId]){
+//            NSLog(@"앱이 있네용");
+        }else{
+            NSLog(@"앱이 없네용 %@",bundleId);
+            bResult = [self removeApp:bundleId];
+            
         }
     }
-    // ~
-    
-    {   // WebDriverAgentRunner App 을 삭제 한다.
-        DDLogInfo(@"udid = %@",self.deviceInfos.udid);
-        if( !_myAgent.launchBundleId )
-            return ;
-        
-        if( 0 == _myAgent.launchBundleId.length )
-            return ;
-        
-        if( [_myAgent.launchBundleId isEqualToString:@"com.onycom.ResourceMornitor2"] )
-            return ;
-        
-//        NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U com.apple.test.WebDriverAgentRunner-Runner -u %@", _deviceInfos.udid];
-//
-//        NSString * output = [Utility launchTaskFromBash:commandString];
-        
-//        NSLog(@"[#### Info ####] rmeove output : \n%@", output);
-        
-//        NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U com.apple.test.WebDriverAgentRunner-Runner -u %@", _deviceInfos.udid];
-//        if( [NSThread isMainThread] ) {
-//            system((char *)[commandString UTF8String]);
-//        } else {
-//            dispatch_sync(dispatch_get_main_queue(), ^{
-//                system((char *)[commandString UTF8String]);
-//            });
-//        }
-    }
-    
-    _myAgent.launchBundleId = nil;
-    _myAgent.bLaunchBundleID = NO;
-    
-//mg//    _myAppList = nil;
-    
-    //초기 앱 정보 삭제
-    if(CMDCLEAR == NO){
-        _deviceInitAppList = nil;
-    }
-    
+    return bResult;
 }
 
+/// @brief  앱삭제
+//- (void)removeInstalledApp
+//- (void)removeInstalledApp:(BOOL)CMDCLEAR
+//{
+//    DDLogDebug(@"%s", __FUNCTION__);
+//    // 시작했을때 가져온 AppList 에서 현재의 AppList 를 가져와 비교해서 새로 추가된 App 들을 삭제한다.
+//    NSMutableDictionary * dicAppList = (NSMutableDictionary *)[self getAppListForDevice:YES];
+////    DDLogDebug(@"current=%d, start=%d", [[dicAppList allKeys] count],  [_deviceInitAppList count]);
+//
+//    for( NSString *appInfo in _deviceInitAppList ) {
+//        DDLogVerbose(@"exclude = %@", appInfo);
+//        @try {
+//            [dicAppList removeObjectForKey:appInfo];
+//        } @catch (NSException *exception) {
+//            NSLog(@"%@",exception.description);
+//        }
+//    }
+//
+//    NSArray * removeAppList = [dicAppList allKeys];
+//    DDLogInfo(@"remove apps = %@", removeAppList);
+//
+//    for( NSString * removeAppInfo in removeAppList ) {
+//        NSString * appId = nil;
+//        NSString * appName = nil;
+//        NSArray * component = [removeAppInfo componentsSeparatedByString:@"|"];
+//        if( 2 == [component count] ) {
+//            appId = [component objectAtIndex:0];
+//            appName = [component objectAtIndex:1];      // 필요없지만 그냥 ..
+//
+//            DDLogInfo(@"id = %@ and name = %@",appId, appName);
+//
+//            if([appId isEqualToString:@"kr.co.metlife.mesia.ipad"] || [appId isEqualToString:@"com.metlife.korea.internal.appcenter"]
+//               || [appId isEqualToString:@"com.metlife.korea.internal.metdo"] || [appId isEqualToString:@"com.interplug.Innisfree"]
+//               || [appId isEqualToString:@"com.apple.test.OnyAgent-Runner"]
+//               || [appId isEqualToString:@"com.apple.test.Don't Touch Me-Runner"]
+//               || [appId isEqualToString:@"com.apple.test.WebDriverAgentRunner-Runner"]
+//               ) {
+//                return;
+//            }
+//
+//            NSRange aRange = [appId rangeOfString:@"com.apple"];
+//            if (aRange.location != NSNotFound)
+//            {
+//                return;
+//            }
+//
+////            NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@ -u %@", appId, _deviceInfos.udid];
+////            NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@", appId];
+////            NSString * output = [Utility launchTaskFromBash:commandString];
+//////            DDLogInfo(@"[#### Info ####] rmeove output : \n%@", output);
+////            if([output hasSuffix:@"Complete"]){
+////                [[CommunicatorWithDC sharedDCInterface] commonResponseClear:NO msg:@"Clear Successed" deviceNo:_deviceInfos.deviceNo];
+////            }
+////            DDLogVerbose(@"output = %@", output);
+//        }
+//    }
+//    // ~
+//
+//    {   // WebDriverAgentRunner App 을 삭제 한다.
+//        DDLogInfo(@"udid = %@",self.deviceInfos.udid);
+//        if( !_myAgent.launchBundleId )
+//            return ;
+//
+//        if( 0 == _myAgent.launchBundleId.length )
+//            return ;
+//
+//        if( [_myAgent.launchBundleId isEqualToString:@"com.onycom.ResourceMornitor2"] )
+//            return ;
+//
+////        NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U com.apple.test.WebDriverAgentRunner-Runner -u %@", _deviceInfos.udid];
+////
+////        NSString * output = [Utility launchTaskFromBash:commandString];
+//
+////        NSLog(@"[#### Info ####] rmeove output : \n%@", output);
+//
+////        NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U com.apple.test.WebDriverAgentRunner-Runner -u %@", _deviceInfos.udid];
+////        if( [NSThread isMainThread] ) {
+////            system((char *)[commandString UTF8String]);
+////        } else {
+////            dispatch_sync(dispatch_get_main_queue(), ^{
+////                system((char *)[commandString UTF8String]);
+////            });
+////        }
+//    }
+//
+//    _myAgent.launchBundleId = nil;
+//    _myAgent.bLaunchBundleID = NO;
+//
+////mg//    _myAppList = nil;
+//
+//    //초기 앱 정보 삭제
+//    if(CMDCLEAR == NO){
+//        _deviceInitAppList = nil;
+//    }
+//
+//}
+
 //mg//20180509//app 삭제
-- (void)removeApp: (NSString *)appId {
-    NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@ -u %@",  _deviceInfos.udid,appId];
-    NSString * output = [Utility launchTaskFromBash:commandString];
+//- (void)removeApp: (NSString *)appId {
+////    NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -U %@ -u %@",  _deviceInfos.udid,appId];
+////    NSString * output = [Utility launchTaskFromBash:commandString];
+//    NSString* commandString = [NSString stringWithFormat:@"ios-deploy -i %@ -r %@", self.deviceInfos.udid,appId];
+//    NSString * output = [Utility launchTaskFromBash:commandString];
+//    NSLog(@"remove output = %@",output);
+//    //해당 앱이 없어도 complete 표시. 별다른 오류 메시지 없음.
+//    //return ([output hasSuffix:@"Complete"]);
+//}
+
+- (BOOL)removeApp: (NSString* )appId{
     
+    NSTask *task = [[NSTask alloc] init];
+    
+    NSString* cpu = [Utility cpuHardwareName];
+    if([cpu isEqualToString:@"x86_64"]){
+        NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -u %@ -U %@",  _deviceInfos.udid,appId];
+        NSString * output = [Utility launchTaskFromBash:commandString];
+        NSLog(@"output = %@",output);
+        return YES;
+    }else{
+        [task setLaunchPath: @"/opt/homebrew/bin/ideviceinstaller"];
+        [task setArguments: [[NSArray alloc] initWithObjects:@"-u",self.deviceInfos.udid ,@"-U",appId, nil]];
+    }
+    
+    NSFileHandle *file = nil;
+    //출력되는 값
+    @try{
+        NSPipe *pipe= [NSPipe pipe];
+        [task setStandardOutput: pipe];
+        file = [pipe fileHandleForReading];
+    }
+    @catch(NSException * exception){
+        DDLogDebug(@"NSException Error = %@ , %@",[exception name], [exception reason]);
+        return NO;
+    }
+
+    __block NSError* error = nil;
+    __block BOOL bTask = YES;
+    if (@available(macOS 10.13, *)) {
+        bTask = [task launchAndReturnError:&error];
+    }else{
+        [task launch];
+    }
+    [task waitUntilExit];
+
+    if(error){
+         DDLogError(@"APP UNINSTALL ERROR = %@",error.description);
+        return NO;
+     }else{
+         DDLogDebug(@"APP UNINSTALLT SUCCESS = %d",bTask);
+         NSData *data = [file readDataToEndOfFile];
+         NSString *output = [[NSString alloc] initWithData:data encoding: NSUTF8StringEncoding];
+         NSLog(@"uninstall = %@",output);
+         [file closeFile];
+         [task terminate];
+         return YES;
+     }
+    
+    return YES;
+}
+
+- (void)removeApp2: (NSString *)appId {
+    NSString* commandString = [NSString stringWithFormat:@"ideviceinstaller -u %@ -U %@",  _deviceInfos.udid,appId];
+//    NSString * output = [Utility launchTaskFromBash:commandString];
+    NSString * output = [Utility launchTaskFromSh:commandString];
+    NSLog(@"remove output = %@",output);
     //해당 앱이 없어도 complete 표시. 별다른 오류 메시지 없음.
     //return ([output hasSuffix:@"Complete"]);
 }
@@ -1263,8 +1558,8 @@
 /// @brief  사파리 실행 할경우, ResourceMornitor App 을 실행시킨뒤 리소스앱으로 URL 정보를 넣어줘야 함.. 이부분은 정리가 필요함. 필요함.
 /// @todo   WebDriverAgent 가 실행된뒤 바로 ResourceMornitor 앱을 실행하고, 성공하면 DC 로 Start 에 대한 성공을 Response 하는걸로 수정하는게 좋음.
 - (void)installApplication: (NSString * )strUrl {
-    //DDLogInfo(@"######### url = %@ #########",strUrl);
-    DDLogDebug(@"%s", __FUNCTION__);
+    DDLogInfo(@"######### url = %@ #########",strUrl);
+//    DDLogDebug(@"%s", __FUNCTION__);
     //사파리의 경우 추후 변경 가능성이 있어서 내비둠
     
     if( [strUrl hasPrefix:@"Safari"] ) {        // 예) Safari|http://naver.com
@@ -1329,7 +1624,7 @@
             if([temp isEqualToString:strUrl]){
                 isInstalledApp = YES;
                 NSLog(@"앱 목록에 있다!! %@",temp);
-                break;
+//                break;
             }else{
                 NSLog(@"앱 목록에 없다!! %@",temp);
             }
@@ -1355,6 +1650,8 @@
 /// @brief  파일 다운로드 성공시 설치. (Automation일 경우 Appium실행)
 /// @brief  자동화의 경우 예약 테스트 기능이 있는데, 이때 zip 파일을 다운로드함.
 - (void)suceessFileDownload:(NSNotification* )noti {
+
+
     NSString* strPath = noti.object;
     DDLogDebug(@"%s : %@", __FUNCTION__, strPath);
     //DDLogWarn(@"user info  %@", strPath);
@@ -1375,11 +1672,11 @@
             
             NSString* zipFile = [strParts objectAtIndex:0];
             NSString* ipaFile = [strParts objectAtIndex:1];
+//            ipaFile = @"UICatalog.ipa";
             
             [blockSelf unzipFile:zipFile];
             NSFileManager* mgr = [NSFileManager defaultManager];
 
-            //mg//20180509//지정된 ipa 설치
             NSString* appPath = [NSString stringWithFormat:@"%@/%@", [blockSelf managerDirectoryForDevice], ipaFile];
             BOOL isAppExist = [mgr fileExistsAtPath:appPath];
             if (isAppExist) {
@@ -1541,7 +1838,66 @@
     
     return output;
 }
-
+//
+///// @brief  ipa 파일에서 BundleId 를 얻어온다.
+//- (NSString*) getBundleID:(NSString*)path
+//{
+//    //CFBundleExecutable
+//    NSString* commandString = [NSString stringWithFormat:@"cd \"%@\" ; unzip -q \"%@\" -d temp ; APP_NAME=$(ls temp/Payload/) ; /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \"%@/temp/Payload/$APP_NAME/Info.plist\" ; rm -rf temp",
+//                               [self managerDirectoryForDevice],
+//                               path,
+//                               [self managerDirectoryForDevice]];
+//
+//    NSTask* iTask =  [[NSTask alloc] init];
+//    iTask.launchPath = @"/bin/bash";
+//
+//    iTask.arguments  = [NSArray arrayWithObjects:
+//                        @"-l", @"-c",
+//                        commandString,
+//                        nil];
+//    NSPipe *pipe= [NSPipe pipe];
+//    [iTask setStandardOutput: pipe];
+//
+//    NSFileHandle *file = [pipe fileHandleForReading];
+//
+//    NSString *output = nil;
+//
+//    //mg//[iTask launch];
+//    //mg//s
+//    if( [NSThread isMainThread] ) {
+//        @autoreleasepool {
+//            [iTask launch];
+//            [iTask waitUntilExit];
+//        }
+//    } else {
+//        dispatch_async(dispatch_get_main_queue(), ^{
+//            @autoreleasepool {
+//                [iTask launch];
+//                [iTask waitUntilExit];
+//            }
+//        });
+//    }
+//    //mg//e
+//
+//        NSData *data = [file readDataToEndOfFile];
+//        output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
+//
+//        [file closeFile];
+//
+//        output = [output stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+//
+//        NSRange the_range = [output rangeOfString:@"Exist" options:NSCaseInsensitiveSearch];
+//        if (the_range.location != NSNotFound) {
+//            DDLogError(@"BundleID not found:%@", output);
+//            DDLogError(@"Use old method");
+//            output = nil;
+//        }
+//        else {
+//            DDLogWarn(@"BundleID %@", output);
+//        }
+//
+//    return output;
+//}
 /// @brief  ipa 파일에서 BundleId 를 얻어온다.
 - (NSString*) getBundleID:(NSString*)path
 {
@@ -1565,43 +1921,75 @@
     
     NSString *output = nil;
 
-    //mg//[iTask launch];
+    //mg//
+    [iTask launch];
+    [iTask waitUntilExit];
     //mg//s
-    if( [NSThread isMainThread] ) {
-        @autoreleasepool {
-            [iTask launch];
-            [iTask waitUntilExit];
-        }
-    } else {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            @autoreleasepool {
-                [iTask launch];
-                [iTask waitUntilExit];
-            }
-        });
-    }
+//    if( [NSThread isMainThread] ) {
+//        @autoreleasepool {
+//            [iTask launch];
+//            [iTask waitUntilExit];
+//        }
+//    } else {
+//        dispatch_async(dispatch_get_main_queue(), ^{
+//            @autoreleasepool {
+//                [iTask launch];
+//                [iTask waitUntilExit];
+//            }
+//        });
+//    }
+//    [iTask launch];
+//    [iTask waitUntilExit];
+
+//    if( [NSThread isMainThread] ) {
+//            @autoreleasepool {
+//                [iTask launch];
+//                [iTask waitUntilExit];
+//            }
+//        } else {
+//            dispatch_async(dispatch_get_main_queue(), ^{
+//                @autoreleasepool {
+//    //                [iTask launch];
+//    //                [iTask waitUntilExit];
+//                    NSError* error = nil;
+//                    if (@available(macOS 10.13, *)) {
+//                        BOOL bSuccess = [iTask launchAndReturnError:&error];
+//                        if(bSuccess){
+//                            NSLog(@"성공");
+//                        }else{
+//                            NSLog(@"실패");
+//                        }
+//                        if(error){
+//                            NSLog(@"%s %@",__FUNCTION__,error.description);
+//                        }
+//                    }else{
+//                        [iTask launch];
+//                        [iTask waitUntilExit];
+//                    }
+//                }
+//            });
+//        }
     //mg//e
 
-        NSData *data = [file readDataToEndOfFile];
-        output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
-        
-        [file closeFile];
-        
-        output = [output stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        
-        NSRange the_range = [output rangeOfString:@"Exist" options:NSCaseInsensitiveSearch];
-        if (the_range.location != NSNotFound) {
-            DDLogError(@"BundleID not found:%@", output);
-            DDLogError(@"Use old method");
-            output = nil;
-        }
-        else {
-            DDLogWarn(@"BundleID %@", output);
-        }
+    NSData *data = [file readDataToEndOfFile];
+    output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
+    
+    [file closeFile];
+    
+    output = [output stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    
+    NSRange the_range = [output rangeOfString:@"Exist" options:NSCaseInsensitiveSearch];
+    if (the_range.location != NSNotFound) {
+        DDLogError(@"BundleID not found:%@", output);
+        DDLogError(@"Use old method");
+        output = nil;
+    }
+    else {
+        DDLogWarn(@"BundleID = %@", output);
+    }
     
     return output;
 }
-
 /// @brief  ipa 파일에서 앱이름을 얻는다.
 - (NSString*) getBundleName:(NSString*)path
 {
@@ -1691,8 +2079,27 @@
                 blockSelf.myAgent.launchBundleId = bundleid;
                 blockSelf.myAgent.launchAppName = appName;
                 
+//                if(_deviceInitAppList != nil){
+//                    for(int i = 0; i<_deviceInitAppList.count; i++){
+//                        NSString* temp = [_deviceInitAppList objectAtIndex:i];
+//                        if([temp isEqualToString:bundleid]){
+//                            NSLog(@"앱이있다");
+//                            [[CommunicatorWithDC sharedDCInterface] commonResponseForInstall:NO appId:@"앱이존재함" deviceNo:_deviceInfos.deviceNo];
+//
+//                            return;
+//                        }
+//                    }
+//                }
 //                [blockSelf.myAgent launchAppWithFilePath];
                 [blockSelf.myAgent performSelectorInBackground:@selector(launchAppWithFilePath) withObject:nil];
+                NSLog(@"########################################################");
+                NSLog(@"설치된 번들아이디 = %@",bundleid);
+                if(_deviceInstallAppList == nil){
+                    _deviceInstallAppList = [[NSMutableArray alloc] init];
+                }
+                [_deviceInstallAppList addObject:bundleid];
+                NSLog(@"########################################################");
+
                 return;
             }
         });//dispatch_get_main_queue
@@ -1716,29 +2123,31 @@
     theTask.launchPath = @"/usr/bin/unzip";
     theTask.arguments  = [NSArray arrayWithObjects:
                           @"-o", zipPath, @"-d", dPath, nil];
-    
+    NSLog(@"zip = (%@)",zipPath);
+    NSLog(@"dPath = (%@)",dPath);
     NSPipe *pipe= [NSPipe pipe];
     [theTask setStandardOutput: pipe];
     
     NSFileHandle *file = [pipe fileHandleForReading];
     
-        //mg//[theTask launch];
+    [theTask launch];
     //mg//s
-    if( [NSThread isMainThread] ) {
-        @autoreleasepool {
-            [theTask launch];
-            [theTask waitUntilExit];
-        }
-    } else {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            @autoreleasepool {
-                [theTask launch];
-                [theTask waitUntilExit];
-            }
-        });
-    }
+//    if( [NSThread isMainThread] ) {
+//        @autoreleasepool {
+//            [theTask launch];
+//            [theTask waitUntilExit];
+//        }
+//    } else {
+//        dispatch_async(dispatch_get_main_queue(), ^{
+//            @autoreleasepool {
+//                [theTask launch];
+//                [theTask waitUntilExit];
+//            }
+//        });
+//    }
     //mg//e
 
+    
     NSData *data = [file readDataToEndOfFile];
     [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
     
@@ -1800,25 +2209,26 @@
 /// @return "번들아이디|앱이름\n번들아이디|앱이름\n번들아이디|앱이름" ...
 - (id) getAppListForDevice:(BOOL)remove{
     DDLogDebug(@"%s", __FUNCTION__);
-    
+        
     NSTask *task = [[NSTask alloc] init];
-    task.environment = [NSDictionary dictionaryWithObjectsAndKeys:@"/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin", @"PATH", nil];
-    [task setLaunchPath: @"/usr/local/bin/ideviceinstaller"];
-    //하나의 PC에 여러개의 device가 물려있을 경우가 있으므로 self.myDeviceUdid값은 꼭 넣어준다. -u (UDID)
-//    [task setArguments: [[NSArray alloc] initWithObjects:@"-l", @"-u", self.deviceInfos.udid, nil]];
-    //하나의 PC에 한개의 Device가 물려있을 경우의 명령어
-//    [task setArguments: [[NSArray alloc] initWithObjects:@"-l", nil]];
-    //해당 시스템앱까지 모두 호출 홈화면 시작에서 수정
-    [task setArguments:[[NSArray alloc] initWithObjects:@"-l",@"-o",@"list_all", nil]];
+//    task.environment = [NSDictionary dictionaryWithObjectsAndKeys:@"/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin", @"PATH", nil];
+
+    NSString* cpu = [Utility cpuHardwareName];
     
+    if([cpu isEqualToString:@"x86_64"]){
+        [task setLaunchPath: @"/usr/local/bin/ios-deploy"];
+        [task setArguments: [[NSArray alloc] initWithObjects:@"-i",self.deviceInfos.udid ,@"-B", nil]];
+    }else{
+        [task setLaunchPath: @"/opt/homebrew/bin/ios-deploy"];
+        [task setArguments: [[NSArray alloc] initWithObjects:@"-i",self.deviceInfos.udid ,@"-B", nil]];
+    }
     if(![[NSFileManager defaultManager] isExecutableFileAtPath:[task launchPath]] || [[NSWorkspace sharedWorkspace] isFilePackageAtPath:[task launchPath]]){
-//        return nil;
         DDLogDebug(@"launchPath Error = %@",[task launchPath]);
         return nil;
     }else{
         NSLog(@"####################");
     }
-    
+
     NSFileHandle *file = nil;
     //출력되는 값
     @try{
@@ -1830,156 +2240,112 @@
         DDLogDebug(@"NSException Error = %@ , %@",[exception name], [exception reason]);
         return nil;
     }
-    
+
     __block NSError* error = nil;
     __block BOOL bTask = YES;
-    if( [NSThread isMainThread] ) {
-         DDLogDebug(@"Task Main launch");
-        if (@available(macOS 10.13, *)) {
-            bTask = [task launchAndReturnError:&error];
-        } else {
-             [task launch];
-        }
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            //exception 발생하면, 이후에 계속 발생하므로, 정상 동작할 수 없음
-            //프로그램 재실행하기 위해 공통 예외처리로 넘김
-            DDLogDebug(@"Task After launch");
-            if (@available(macOS 10.13, *)) {
-                bTask = [task launchAndReturnError:&error];
-            } else {
-                 [task launch];
-            }
-        });
-    }//if - else : launch
-    
-    
+//    if( [NSThread isMainThread] ) {
+//         DDLogDebug(@"Task Main launch");
+//        if (@available(macOS 10.13, *)) {
+//            bTask = [task launchAndReturnError:&error];
+//        } else {
+//             [task launch];
+//        }
+//    } else {
+//        dispatch_sync(dispatch_get_main_queue(), ^{
+//            //exception 발생하면, 이후에 계속 발생하므로, 정상 동작할 수 없음
+//            //프로그램 재실행하기 위해 공통 예외처리로 넘김
+//            DDLogDebug(@"Task After launch");
+//            if (@available(macOS 10.13, *)) {
+//                bTask = [task launchAndReturnError:&error];
+//            } else {
+//                 [task launch];
+//            }
+//        });
+//    }//if - else : launch
+    bTask = [task launchAndReturnError:&error];
+    [task waitUntilExit];
+
     if(error){
          DDLogError(@"DEVICE LIST ERROR = %@",error.description);
         return nil;
      }else{
          DDLogDebug(@"DEVICE LIST SUCCESS = %d",bTask);
          NSData *data = [file readDataToEndOfFile];
-             NSString *output = [[NSString alloc] initWithData:data encoding: NSUTF8StringEncoding];
-             [file closeFile];
-             [task terminate];
-             task = nil;
-             
-         //    DDLogVerbose(@"output : %@",output);
-             NSArray* list = nil;
-             list = [output componentsSeparatedByString:@"\n"];
-             
-             id appList = nil;
-             
-             if(list != nil) {
-                 NSMutableArray * arrAppList = nil;
-                 NSMutableDictionary * dicAppList = nil;
-                 
-                 for(NSString* appId in list) {
-                     NSArray* tmp = [appId componentsSeparatedByString:@", "];
-                     if([tmp count] < 3) {
-                         tmp = [appId componentsSeparatedByString:@" - "];
-                         if( [tmp count] < 2 )
-                             continue;
+         NSString *output = [[NSString alloc] initWithData:data encoding: NSUTF8StringEncoding];
+         [file closeFile];
+         [task terminate];
+         task = nil;
+
+         NSArray* list = nil;
+         list = [output componentsSeparatedByString:@"\n"];
+         NSMutableArray * arrAppList = [[NSMutableArray alloc] init];
+         if(list != nil) {
+             for(NSString* appId in list) {
+                 if([appId hasPrefix:@"Skipping"] == NO && [appId hasPrefix:@"[." ] == NO){
+                     if(appId.length > 0){
+                        [arrAppList addObject:appId];
                      }
-                     NSString * bundleID = [tmp objectAtIndex:0];
-                     NSString * bundleName;
-                     if([tmp count] == 2){
-                         bundleName = [tmp objectAtIndex:1];
-                     }else{
-                         bundleName = [tmp objectAtIndex:2];
-                     }
-                     
-                     if( [@"CFBundleIdentifier" isEqualToString:bundleID] )
-                         continue;
-                     
-                     if( [@"com.onycom.ResourceMornitor2" isEqualToString:bundleID] )
-                         continue;
-                     
-         //            [tmpBundleIDs addObject:bundleID];
-                     NSString* temp = [NSString stringWithFormat:@"%@|%@",bundleID,bundleName];
-                     
-                     if( remove ) {
-                         if( !dicAppList ) {
-                             dicAppList = [NSMutableDictionary dictionary];
-                             appList = dicAppList;
-                         }
-                         [dicAppList setObject:@YES forKey:temp];
-                     } else {
-                         if( !arrAppList ) {
-                             arrAppList = [NSMutableArray array];
-                             appList = arrAppList;
-                         }
-                         [arrAppList addObject:temp];
-                     }
+
                  }
              }
-         return appList;
+
+         }
+         
+//         NSLog(@"arr app list = %@",arrAppList);
+         return arrAppList;
      }
-    
-//    NSData *data = [file readDataToEndOfFile];
-//    NSString *output = [[NSString alloc] initWithData:data encoding: NSUTF8StringEncoding];
-//    [file closeFile];
-//    [task terminate];
-//    task = nil;
+//    NSPipe* outPipe = [NSPipe pipe];
+//    NSPipe* errPipe = [NSPipe pipe];
 //
-////    DDLogVerbose(@"output : %@",output);
-//    NSArray* list = nil;
-//    list = [output componentsSeparatedByString:@"\n"];
+////    NSTask * testTask = [[NSTask alloc] init];
+////    testTask.launchPath = @"/bin/bash";
+//    __block dispatch_semaphore_t resourceMornitorSem = dispatch_semaphore_create(0);
+//    NSString* path = @"/usr/local/bin/ios-deploy";
 //
-//    id appList = nil;
+////    [task setArguments: [[NSArray alloc] initWithObjects:@"-i",self.deviceInfos.udid ,@"-B", nil]];
+//    NSString* commandString = [NSString stringWithFormat:@"ios-deploy -u %@ -B",self.deviceInfos.udid];
 //
-//    if(list != nil) {
-//        NSMutableArray * arrAppList = nil;
-//        NSMutableDictionary * dicAppList = nil;
+//    NSUserUnixTask* unixTask = [[NSUserUnixTask alloc] initWithURL:[NSURL fileURLWithPath:path] error:nil];
+//    NSArray* argArray  = [NSArray arrayWithObjects:
+//                           @"-u",
+//                           self.deviceInfos.udid,
+//                           @"-B",
+//                           nil];
 //
-//        for(NSString* appId in list) {
-//            NSArray* tmp = [appId componentsSeparatedByString:@", "];
-//            if([tmp count] < 3) {
-//                tmp = [appId componentsSeparatedByString:@" - "];
-//                if( [tmp count] < 2 )
-//                    continue;
-//            }
-//            NSString * bundleID = [tmp objectAtIndex:0];
-//            NSString * bundleName;
-//            if([tmp count] == 2){
-//                bundleName = [tmp objectAtIndex:1];
-//            }else{
-//                bundleName = [tmp objectAtIndex:2];
-//            }
 //
-//            if( [@"CFBundleIdentifier" isEqualToString:bundleID] )
-//                continue;
+//    [unixTask setStandardOutput:[outPipe fileHandleForWriting]];
+//    [unixTask setStandardError:[errPipe fileHandleForWriting]];
+//    __block NSString * output = nil;
+//    [unixTask executeWithArguments:argArray completionHandler:^(NSError *error) {
+//        output = [[NSString alloc] initWithData: [[outPipe fileHandleForReading] readDataToEndOfFile] encoding: NSUTF8StringEncoding];
+//        NSLog(@"stdout: %@", output);
 //
-//            if( [@"com.onycom.ResourceMornitor2" isEqualToString:bundleID] )
-//                continue;
+//       NSString *error1 = [[NSString alloc] initWithData: [[errPipe fileHandleForReading] readDataToEndOfFile] encoding: NSUTF8StringEncoding];
+//       NSLog(@"stderr: %@", error1);
+//        dispatch_semaphore_signal(resourceMornitorSem);
+//    }];
+//    dispatch_semaphore_wait(resourceMornitorSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f *NSEC_PER_SEC)));
 //
-////            [tmpBundleIDs addObject:bundleID];
-//            NSString* temp = [NSString stringWithFormat:@"%@|%@",bundleID,bundleName];
+//     NSArray* list = nil;
+//     list = [output componentsSeparatedByString:@"\n"];
+//     NSMutableArray * arrAppList = [[NSMutableArray alloc] init];
+//     if(list != nil) {
+//         for(NSString* appId in list) {
+//             if([appId hasPrefix:@"Skipping"] == NO && [appId hasPrefix:@"[." ] == NO){
+//                 if(appId.length > 0){
+//                    [arrAppList addObject:appId];
+//                 }
 //
-//            if( remove ) {
-//                if( !dicAppList ) {
-//                    dicAppList = [NSMutableDictionary dictionary];
-//                    appList = dicAppList;
-//                }
-//                [dicAppList setObject:@YES forKey:temp];
-//            } else {
-//                if( !arrAppList ) {
-//                    arrAppList = [NSMutableArray array];
-//                    appList = arrAppList;
-//                }
-//                [arrAppList addObject:temp];
-//            }
-//        }
-//    }
-    
-//    return [arrAppList componentsJoinedByString:@"\n"];
-//    return appList;
+//             }
+//         }
+//
+//     }
+//     return arrAppList;
 }//getAppListForDevice
 
 
-//#define XML
-#define DESCRIPTION
+#define XML
+//#define DESCRIPTION
 /// @brief  idevice 화면 정보를 XML 로 가져와서 최상위 Element 에 "AppiumAUT" 엘리멘트를 추가한뒤 파일로 저장한다.
 /// @brief  uploadDumpFile 메소드에서 파일을 읽어서 처리한다... 굳이 파일로 저장할 필요는 없는데.. 디버깅용으로 저장해두는거 같다. (이전담당자가 이렇게 만들어놨음..)
 - (NSString *)saveToSourceFile

@@ -23,6 +23,24 @@
 @implementation DeviceInfos
 @synthesize customDelegate;
 
+
+static DeviceInfos *myShareDeviceInfo = nil;
+
+/// @brief 싱글턴 객체 생성
++ (DeviceInfos *)shareDeviceInfos {
+    
+    static dispatch_once_t onceToken ;
+    dispatch_once(&onceToken, ^{
+        if (!myShareDeviceInfo || myShareDeviceInfo == nil) {
+            myShareDeviceInfo = [[DeviceInfos alloc] init] ;
+            myShareDeviceInfo.arrayDeivce = [[NSMutableArray alloc] init];
+        }
+    });
+    
+    return myShareDeviceInfo ;
+}
+
+
 - (id) init {
     self = [super init];
     if( self ) {
@@ -168,6 +186,55 @@
     _productVersion = nil;
     
 //    _usbNumber = nil;       // Detach 되었다가 Attach 되었을 때만 정보가 변경된다..
+}
+
+
+-(NSString *) buildWDAResult:(NSString* )udid
+{
+    @try
+    {
+        // Set up the process
+        NSTask *t = [[NSTask alloc] init];
+        [t setLaunchPath:@"/bin/ls"];
+        
+        NSString* udidPath = [udidPath stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString* path = [NSString stringWithFormat:@"%@PreBuild4WDA/%@/Build/Products/",[Utility managerDirectory],udid];
+        [t setCurrentDirectoryPath:path];
+        [t setArguments:[NSArray arrayWithObjects:@"-1", path, nil]];
+        
+        // Set the pipe to the standard output and error to get the results of the command
+        NSPipe *p = [[NSPipe alloc] init];
+        [t setStandardOutput:p];
+        [t setStandardError:p];
+        
+        // Launch (forks) the process
+        [t launch]; // raises an exception if something went wrong
+        
+        // Prepare to read
+        NSFileHandle *readHandle = [p fileHandleForReading];
+        NSData *inData = nil;
+        NSMutableData *totalData = [[NSMutableData alloc] init];
+        
+        while ((inData = [readHandle availableData]) &&
+               [inData length]) {
+            [totalData appendData:inData];
+        }
+        
+        // Polls the runloop until its finished
+        [t waitUntilExit];
+        
+        NSString * output = [[NSString alloc] initWithData:totalData encoding: NSUTF8StringEncoding];
+        
+        NSArray* temp = [output componentsSeparatedByString:@"\n"];
+        NSString* buildWDA = [NSString stringWithFormat:@"%@",[temp objectAtIndex:1]];
+        return buildWDA;
+    }
+    @catch (NSException *e)
+    {
+        NSLog(@"Expection occurred %@", [e reason]);
+        return @"0";
+        
+    }
 }
 
 @end

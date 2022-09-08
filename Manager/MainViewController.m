@@ -40,7 +40,8 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 //};
 
 @interface MainViewController () <ConnectionItemInfoDelegate, NSComboBoxDelegate> {
-    
+    int nComboNumber;
+    NSString* deviceUdid;
 }
 
 /// @brief  한글 토큰 RemoteKeyboard 사용시 입력받은 키보드의 문자로 한글 문자를 변환하기 위해 사용함.
@@ -48,6 +49,9 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 
 /// ConnectionItemInfo 의 리스트
 @property (nonatomic, strong) NSMutableArray        * arrConnectionItemList;
+
+//swccc test
+@property (nonatomic, strong) NSMutableArray        * arrStartAppList;
 
 /// 사용안함.
 @property (nonatomic, strong) dispatch_queue_t      listenQueue;
@@ -57,6 +61,17 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 
 /// UI에 출력중인 로그정보를 일정 시간단위로 삭제하기 위해 서용하는 타이머
 @property (nonatomic, strong) NSTimer               * clearLogTimer;
+
+@property (nonatomic, assign) IBOutlet NSComboBox            *comboBox;
+@property (nonatomic, assign) IBOutlet NSProgressIndicator   *indicator;
+
+@property (weak) IBOutlet NSBox* boxBuildLoading;
+@property (weak) IBOutlet NSImageView* imgView;
+@property (weak) IBOutlet NSScrollView *managerField;
+@property (assign) IBOutlet NSTextView *txtManagerView;
+
+
+@property (assign) IBOutlet NSButton *btnLOG;
 
 #ifdef VER_STANDALONE
 ///사용하지 않음.
@@ -68,37 +83,7 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 /// 멀티 연결되도록 수정이 된다면... 위의 정보를 ConnectionItemInfo 객체 개별적으로 사용할 수 있도록 해야 한다. (Device 마다 설정정보가 다를수 있으므로..)
 @property (nonatomic, strong) NSDictionary          * dicAgentInfos;
 
-@property (weak) IBOutlet NSTextField* tfUdid;
-@property (weak) IBOutlet NSTextField* tfName;
-@property (weak) IBOutlet NSTextField* tfVersion;
-@property (weak) IBOutlet NSTextField* tfPort;
-@property (weak) IBOutlet NSTextField* tfRatio;
-@property (weak) IBOutlet NSTextField* tfProxy;
-
-@property (weak) IBOutlet NSScrollView *scrAppLog;
-
-@property (assign) IBOutlet NSTextField *tfLogInfo;
-//DeviecLog창
-@property (weak) IBOutlet NSScrollView *statusField;
-@property (assign) IBOutlet NSTextView *txtView;
-//AppiumLog창
-@property (weak) IBOutlet NSScrollView *appumField;
-@property (assign) IBOutlet NSTextView *txtAppiumView;
-//Manager창
-@property (weak) IBOutlet NSScrollView *managerField;
-@property (assign) IBOutlet NSTextView *txtManagerView;
-
-@property (weak) IBOutlet NSButton *btnRemoveLog;
-
-@property (weak) IBOutlet NSTextField *tfAppLog;
-@property (weak) IBOutlet NSButton *btnExpandAppLog;
-
-@property (weak) IBOutlet NSComboBox *cmbLog;
-
-//DCLog
-@property (assign) IBOutlet NSTextView *txtDC;
-@property (weak) IBOutlet NSScrollView *dcField;
-
+@property (weak) IBOutlet NSButton *btnRestartManager;
 - (IBAction)ResetAll:(id)sender;
 - (IBAction)connectDevice:(id)sender;
 - (IBAction)getPageSourceByXml:(id)sender;
@@ -143,9 +128,12 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 	
     [super viewDidLoad];
     
+    nComboNumber = 0;
+    
     [self.view setAutoresizesSubviews:YES];
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(deviceConnect:) name:DEVICE_CONNECT object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(deviceDisConnect:) name:DEVICE_DISCONNECT object:nil];
 
 ///////// 로그 출력을 막을 경우 아래 부분을 주석 처리
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(deviceLog:) name:DEVICE_LOG object:nil];
@@ -163,6 +151,16 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(dcLog:) name:LOG_DC_SEND object:nil];
     
+    [self.comboBox setDelegate:self];
+//    [self.indicator setHidden:YES];
+
+    [self.btnRestartManager setState:NSControlStateValueOn];
+    [[NSUserDefaults standardUserDefaults] setBool:YES forKey:MANAGERRESTART];
+    [self.managerField.documentView setTextColor:[NSColor whiteColor]];
+    [self.managerField.documentView setBackgroundColor:[NSColor blackColor]];
+//    [[NSUserDefaults standardUserDefaults] setBool:NO forKey:MANAGERRESTART];
+    
+    
     //    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(managerErrorLog:) name:LOG_ERROR_SEND object:nil];
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     dateToday=[[NSDateFormatter alloc] init];
@@ -175,48 +173,34 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     
     //mg//[dateNow setDateFormat:@"yyMMddHHmmss"];
     [dateNow setDateFormat:@"yy/MM/dd HH:mm:ss"];//mg//
-    
-    [self makeSubView];
-    
+        
     [self makeTokens];
+
+    [self comboBoxItem];
+       
+    [self showProgressStart:NO];
     
     _dicAgentInfos = [self getAgentInfos];
-    
 #ifdef VER_STANDALONE
     [self initConnectionItemList];
 #else
     [self __getMappingTableFromFileName:MAPPINGFILE];
 #endif
-    
+    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+
+    int nSlot = (int)[defaults integerForKey:DC_PORTNO];
+    nComboNumber = (int)[defaults integerForKey:DC_PORTNO];
+//    ConnectionItemInfo* itemInfo = [self connectionItemInfoByDeviceNo:nSlot+1];
+    ConnectionItemInfo* itemInfo = [self connectionItemInfoByDeviceNo:nSlot+1];
+    deviceUdid = itemInfo.deviceInfos.udid;
+    [itemInfo clearProcess:deviceUdid andLog:YES];
 //    int nDeviceCount = [self getDeviceCount];
 //    DDLogInfo(@"Connected USB Device count : %d", nDeviceCount);
     [self startSocketServer:0];
-    
-
-    [self initDeviceInfo];
-    
     // 12시간 단위로 로그를 초기화 한다.
     _clearLogTimer = [NSTimer scheduledTimerWithTimeInterval:(12 * 60 * 60) target:self selector:@selector(onClearLogTimer:) userInfo:nil repeats:YES];
 //    _clearLogTimer = [NSTimer scheduledTimerWithTimeInterval:(10 * 60) target:self selector:@selector(onClearLogTimer:) userInfo:nil repeats:YES];
         
-    //mg//불필요한 로그 삭제
-/*    DDLogError(@"Error");
-    DDLogWarn(@"Warn");
-    DDLogInfo(@"Info");
-    DDLogVerbose(@"Verbose");
-    DDLogError(@"DD Error");
-    DDLogWarn(@"Warn");
-    DDLogInfo(@"Info");
-    DDLogVerbose(@"Verbose");
-    DDLogError(@"DD Error");
-    DDLogWarn(@"Warn");
-    DDLogInfo(@"Info");
-    DDLogVerbose(@"Verbose");
-    DDLogError(@"DD Error");
-    DDLogWarn(@"Warn");
-    DDLogInfo(@"Info");
-    DDLogVerbose(@"Verbose");
-*/
     DDLogInfo(@"LOG_LEVEL_DEF = %d",LOG_LEVEL_DEF);
     DDLogInfo(@"LOG_LEVEL_VERBOSE = %d",(int)LOG_LEVEL_VERBOSE);
 
@@ -242,39 +226,6 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     }
 }
 
--(void)makeSubView{
-//    [self.statusField setBackgroundColor:[NSColor redColor]];
-
-    [[self.txtView textStorage] setFont:[NSFont fontWithName:@"Menlo" size:15]];
-    
-
-    
-    [self.statusField.documentView setTextColor:[NSColor whiteColor]];
-    [self.statusField.documentView setBackgroundColor:[NSColor blackColor]];
-
-    [self.appumField.documentView setTextColor:[NSColor whiteColor]];
-    [self.appumField.documentView setBackgroundColor:[NSColor blackColor]];
-
-    [self.managerField.documentView setTextColor:[NSColor whiteColor]];
-    [self.managerField.documentView setBackgroundColor:[NSColor blackColor]];
-
-    
-    [self.btnRemoveLog setImage:[NSImage imageNamed:@"header_icon_delete_n"]];
-    [self.btnRemoveLog setBordered:NO];
-    
-    //초기화면 Manager로그로 설정
-    [self.cmbLog selectItemAtIndex:2];//0//mg//device log가 기본으로 표시돼서, manager log로 변경
-    [self showLogField:2];//0//mg//device log가 기본으로 표시돼서, manager log로 변경
-}
-
--(void)initDeviceInfo{
-    [self.tfUdid setStringValue:@"입력된 값이 없습니다."];
-    [self.tfName setStringValue:@"입력된 값이 없습니다."];
-    [self.tfVersion setStringValue:@"입력된 값이 없습니다."];
-    [self.tfPort setStringValue:@"입력된 값이 없습니다."];
-    [self.tfRatio setStringValue:@"입력된 값이 없습니다."];
-    [self.tfProxy setStringValue:@"입력된 값이 없습니다."];
-}
 
 -(void)createDirectory:(NSString *)directoryName atFilePath:(NSString *)filePath
 {
@@ -294,29 +245,52 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 -(void)logToFile:(NSString * )msg
 {
     //get path to Documents/*.txt
+//    NSLog(@"### LOG ###");
+//    NSLog(@"%@",msg);
+//    NSLog(@"### LOG ###");
     [self performSelectorOnMainThread:@selector(saveLogData:)
                            withObject:msg
                         waitUntilDone:YES];
 }
 
 /// @brief 예외 발생시 로그 파일 저장
--(void)saveLogData:(id)logData{
-    const NSString* directory = [NSString stringWithFormat:@"%@/LOG", [Utility managerDirectory]];
-    if(![[NSFileManager defaultManager] fileExistsAtPath:(NSString *)directory]){
-        //mg//[self createDirectory:@"LOG" atFilePath:(NSString *)directory];
-        [self createDirectory:@"LOG" atFilePath:[Utility managerDirectory]];//mg//
-    }
-    
-//    NSDateFormatter *date = [[NSDateFormatter alloc] init];
-//    [date setDateFormat:@"yyMMdd"];
-    
-//    NSString* dateDir = [NSString stringWithFormat:@"%@/LOG/%@",managerDirectory(),[date stringFromDate:[NSDate date]]];
-//    if(![[NSFileManager defaultManager] fileExistsAtPath:dateDir]){
-//        [self createDirectory:[date stringFromDate:[NSDate date]] atFilePath:directory];
+//-(void)saveLogData:(id)logData{
+//    const NSString* directory = [NSString stringWithFormat:@"%@/LOG", [Utility managerDirectory]];
+//    if(![[NSFileManager defaultManager] fileExistsAtPath:(NSString *)directory]){
+//        //mg//[self createDirectory:@"LOG" atFilePath:(NSString *)directory];
+//        [self createDirectory:@"LOG" atFilePath:[Utility managerDirectory]];//mg//
 //    }
-    
-//    NSString* path = [NSString stringWithFormat:@"%@/LOG/%@/%@.manaul.log.txt",managerDirectory(),[date stringFromDate:[NSDate date]],[dateToday stringFromDate:[NSDate date]]];
-    NSString* path = [NSString stringWithFormat:@"%@/%@.manaul.log.txt", directory, [dateToday stringFromDate:[NSDate date]]];
+//
+////    NSDateFormatter *date = [[NSDateFormatter alloc] init];
+////    [date setDateFormat:@"yyMMdd"];
+//
+////    NSString* dateDir = [NSString stringWithFormat:@"%@/LOG/%@",managerDirectory(),[date stringFromDate:[NSDate date]]];
+////    if(![[NSFileManager defaultManager] fileExistsAtPath:dateDir]){
+////        [self createDirectory:[date stringFromDate:[NSDate date]] atFilePath:directory];
+////    }
+//
+////    NSString* path = [NSString stringWithFormat:@"%@/LOG/%@/%@.manaul.log.txt",managerDirectory(),[date stringFromDate:[NSDate date]],[dateToday stringFromDate:[NSDate date]]];
+//    NSString* path = [NSString stringWithFormat:@"%@/%@.manaul.log.txt", directory, [dateToday stringFromDate:[NSDate date]]];
+//    // create file
+//    if(![[NSFileManager defaultManager] fileExistsAtPath:path]){
+//        fprintf(stderr, "Creating file at %s",[path UTF8String]);
+//        [[NSData data] writeToFile:path atomically:YES];
+//    }
+//
+//    // append
+//    NSFileHandle* handle = [NSFileHandle fileHandleForWritingAtPath:path];
+//    [handle truncateFileAtOffset:[handle seekToEndOfFile]];
+//    [handle writeData:[logData dataUsingEncoding:NSUTF8StringEncoding]];
+//    [handle closeFile];
+//}
+
+
+-(void)saveLogData:(id)logData{
+    const NSString* directory = [NSString stringWithFormat:@"%@/LOGM", [Utility managerDirectory]];
+    if(![[NSFileManager defaultManager] fileExistsAtPath:(NSString *)directory]){
+        [self createDirectory:@"LOGM" atFilePath:[Utility managerDirectory]];
+    }
+    NSString* path = [NSString stringWithFormat:@"%@/%@(%d).log.txt", directory, [dateToday stringFromDate:[NSDate date]],nComboNumber];
     // create file
     if(![[NSFileManager defaultManager] fileExistsAtPath:path]){
         fprintf(stderr, "Creating file at %s",[path UTF8String]);
@@ -333,73 +307,25 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 /// @brief Manager UI Log 출력
 -(void)managerLog:(NSNotification* )noti
 {
-//    [self performSelectorOnMainThread:@selector(appendManagerLog:)
-//                           withObject:msg
-//                        waitUntilDone:YES];
-//    NSString* log = [NSString stringWithFormat:@"\n%@ : [MANAGER] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-    
-    //mg//if( [NSThread isMainThread] ) {
-        NSString* log;
-        
-        //mg//info 이상만 화면에 표시, debug 추가
-        //verbose
-        /*if([noti.name isEqualToString:@"LOG_VERBOSE_SEND"]){
-            log = [NSString stringWithFormat:@"\n%@ : [MANAGER_VERBOSE] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-            [self appendStringValue:log mode:0 type:TYPE_MANAGER];
-        }
-        
-        else if([noti.name isEqualToString:@"LOG_DEBUG_SEND"]){
-            log = [NSString stringWithFormat:@"\n%@ : [MANAGER_DEBUG] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-            [self appendStringValue:log mode:4 type:TYPE_MANAGER];
-        }
-         */
-    
-        //info
-        if([noti.name isEqualToString:@"LOG_INFO_SEND"]){
-            log = [NSString stringWithFormat:@"\n%@ [I] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-            [self appendStringValue:log mode:3 type:TYPE_MANAGER];
-        }
-        //warning
-        else if([noti.name isEqualToString:@"LOG_WARN_SEND"]){
-            log = [NSString stringWithFormat:@"\n%@ [W] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-            [self appendStringValue:log mode:2 type:TYPE_MANAGER];
-        }
-        //error
-        else if([noti.name isEqualToString:@"LOG_ERROR_SEND"]){
-            log = [NSString stringWithFormat:@"\n%@ [E] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-            [self appendStringValue:log mode:1 type:TYPE_MANAGER];
-        }
-        
-        //mg//로그 파일 수정//
+//    NSString* log;
+    NSString* log;
+    //info
+    if([noti.name isEqualToString:@"LOG_INFO_SEND"]){
+        log = [NSString stringWithFormat:@"\n%@ [I] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
+        [self appendStringValue:log mode:3 type:TYPE_MANAGER];
+    }
+    //warning
+    else if([noti.name isEqualToString:@"LOG_WARN_SEND"]){
+        log = [NSString stringWithFormat:@"\n%@ [W] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
+        [self appendStringValue:log mode:2 type:TYPE_MANAGER];
+    }
+    //error
+    else if([noti.name isEqualToString:@"LOG_ERROR_SEND"]){
+        log = [NSString stringWithFormat:@"\n%@ [E] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
+        [self appendStringValue:log mode:1 type:TYPE_MANAGER];
+    }
+//    [NSString stringWithFormat:@"\n%@ [I] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];;
     [self logToFile:log];
-        
-        //mg//appendStringValue 내에서 dispatch_async 처리함
-    /*} else {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            NSString* log;
-     
-            //info
-            if([noti.name isEqualToString:@"LOG_INFO_SEND"]){
-                log = [NSString stringWithFormat:@"\n%@ [I] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-                [self appendStringValue:log mode:3 type:TYPE_MANAGER];
-            }
-            //warning
-            else if([noti.name isEqualToString:@"LOG_WARN_SEND"]){
-                log = [NSString stringWithFormat:@"\n%@ [W] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-                [self appendStringValue:log mode:2 type:TYPE_MANAGER];
-            }
-            //error
-            else if([noti.name isEqualToString:@"LOG_ERROR_SEND"]){
-                log = [NSString stringWithFormat:@"\n%@ [E] : %@",[dateNow stringFromDate:[NSDate date]],noti.object];
-                [self appendStringValue:log mode:1 type:TYPE_MANAGER];
-            }
-            
-            [self logToFile:log];
-        });//dispatch_async
-    }//if - else : main thread
-     */
-    
-//    [self appendStringValue:log mode:0 type:TYPE_MANAGER];
 }//managerLog
 
 /// @brief DC에서 전달받은 Command 를 UI 에 출력함.
@@ -444,15 +370,6 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
                                                                                                             NSFontAttributeName : labelFont,
                                                                                                             NSForegroundColorAttributeName : labelColor,
                                                                                                             NSShadowAttributeName : shadow }];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [[self.txtDC textStorage] appendAttributedString:stringToAppend];
-            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.dcField documentView] frame]) - NSHeight([[self.dcField contentView] bounds]));
-            [[self.statusField documentView] scrollPoint:bottom];
-            
-            [self.txtDC setNeedsDisplay:YES];
-        });
-        
     });
 }
 
@@ -479,28 +396,11 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 /// @brief 디바이스 연결 정보를 View 에 보여준다.
 -(void)deviceConnect:(NSNotification* )noti
 {
-    DDLogInfo(@"%s",__FUNCTION__);
-    DDLogInfo(@"%@",[noti userInfo]);
-    
-    NSString* udid = [[noti userInfo] valueForKey:@"UDID"];
-    NSString* name = [[noti userInfo] valueForKey:@"NAME"];
-    NSString* version = [[noti userInfo] valueForKey:@"VERSION"];
-    NSString* port = [[noti userInfo] valueForKey:@"PORT"];
-    NSString* ratio = [[noti userInfo] valueForKey:@"RATIO"];
-    NSString* proxy = [[noti userInfo] valueForKey:@"PROXY"];
-    
-    if( !port )
-        port = @"";
-    
-    if( !proxy )
-        proxy = @"";
-    
-    [self.tfUdid setStringValue:udid];
-    [self.tfName setStringValue:name];
-    [self.tfVersion setStringValue:version];
-    [self.tfPort setStringValue:port];
-    [self.tfRatio setStringValue:ratio];
-    [self.tfProxy setStringValue:proxy];
+    [self.imgView setImage:[NSImage imageNamed:@"connect.jpeg"]];
+}
+
+-(void)deviceDisConnect:(NSNotificationCenter*)noti{
+    [self.imgView setImage:[NSImage imageNamed:@"wait.jpeg"]];
 }
 
 /// @brief 디바이스 로그 정보
@@ -583,8 +483,55 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     return dicContent;
 }
 
+//-(void)comboBoxItem{
+//    NSString *thePath = [NSString stringWithFormat:@"%@/%@", [Utility managerDirectory], MAPPINGFILE];
+//    NSString *content = [NSString stringWithContentsOfFile:thePath encoding:NSUTF8StringEncoding error:NULL];
+//    NSArray *theContentList = [content componentsSeparatedByString:@"\n"];
+//    for (NSString *theItemInfo in theContentList) {
+//        NSArray *theItemList = [theItemInfo componentsSeparatedByString:@"|-|"];
+//        NSString *deviceNo = [theItemList objectAtIndex:0];
+//        [self.comboBox addItemWithObjectValue:deviceNo];
+//    }
+//    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+//    int nPort = (int)[defaults integerForKey:DC_PORT];
+//
+////    [self.comboBox selectItemAtIndex:0];
+//    [self.comboBox selectItemAtIndex:nPort];
+//}
+-(void)comboBoxItem{
+    NSString *thePath = [NSString stringWithFormat:@"%@/%@", [Utility managerDirectory], MAPPINGFILE];
+    NSString *content = [NSString stringWithContentsOfFile:thePath encoding:NSUTF8StringEncoding error:NULL];
+    NSArray *theContentList = [content componentsSeparatedByString:@"\n"];
+    for (NSString *theItemInfo in theContentList) {
+        NSArray *theItemList = [theItemInfo componentsSeparatedByString:@"|-|"];
+        NSString *deviceNo = [theItemList objectAtIndex:0];
+        NSLog(@"%@",deviceNo);
+        [self.comboBox addItemWithObjectValue:deviceNo];
+    }
+    NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+//    int nPort = (int)[defaults integerForKey:DC_PORT];
+    int prevPortNo = (int)[defaults integerForKey:DC_PORTNO];
+//    NSLog(@"port = %d",nPort);
+    NSLog(@"port = %d",prevPortNo);
+    int nIndex = 0;
+    for(int i = 0; i<self.comboBox.numberOfItems; i++){
+        NSString* temp = [self.comboBox itemObjectValueAtIndex:i];
+        NSLog(@"temp = %@",temp);
+        if(prevPortNo == [temp intValue] - 1){
+            NSLog(@"######## index = %d",i );
+            nIndex = i;
+        }
+    }
+    [self.comboBox selectItemAtIndex:nIndex];
+
+//    NSLog(@"%@",[self.comboBox objectValues]);
+//    [self.comboBox selectItemAtIndex:0];
+//    [self.comboBox selectItemAtIndex:0];
+    
+}
+
 /// @brief AppiumDeviceMapping.txt 에서 정보를 읽어들여 ConnectionItemInfo 객체리스트를 생성하며, 각각의 객체에 정보를 넣어준다.
-- (void)__getMappingTableFromFileName:(NSString *)argFileName {
+- (void)__getMappingTableFromFileName:(NSString *)argFileName{
 // DeviceNo |-|   UDID   |-| devicename |-| device version |-| appium port |-| device ratio |-| ios-webkit port
 //   8      |-|udid123abh|-|  version   |-|     9,3,2      |-|    4730     |-|       2      |-| 27760
     NSString *thePath = [NSString stringWithFormat:@"%@/%@", [Utility managerDirectory], argFileName];
@@ -593,55 +540,94 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 	NSArray *theContentList = [content componentsSeparatedByString:@"\n"];
     
     DDLogWarn(@"content swccc = %@",theContentList);
+    DeviceInfos* info = [DeviceInfos shareDeviceInfos];
+    NSLog(@"%d",(int)_comboBox.indexOfSelectedItem);
     
-	for (NSString *theItemInfo in theContentList) {
+    if(self.arrConnectionItemList != nil){
+        self.arrConnectionItemList = nil;
+    }
+    
+    self.arrConnectionItemList = [NSMutableArray arrayWithCapacity:20];
+    
+    
+    for(NSString* item in theContentList){
+//        NSLog(@"item = %@",item);
+        NSArray *theItemList = [item componentsSeparatedByString:@"|-|"];
+        NSString *deviceNo = [theItemList objectAtIndex:0];
+        NSString *deviceUdid = [theItemList objectAtIndex:1];
+        NSString *deviceRatio = [theItemList objectAtIndex:2];
         
-		NSArray *theItemList = [theItemInfo componentsSeparatedByString:@"|-|"];
-		NSString *theDeviceId = [theItemList objectAtIndex:0];
-		NSString *theUdid = [theItemList objectAtIndex:1];
+        NSMutableDictionary* dic = [[NSMutableDictionary alloc ] init];
+        [dic setObject:deviceNo forKey:DEVICENO];
+        [dic setObject:deviceUdid forKey:DEVICEUDID];
+        [dic setObject:deviceRatio forKey:DEVICERATIO];
+//        [dic setObject:[info buildWDAResult:deviceUdid] forKey:DEVICEBUILD];
         
-        NSString *theDeviceName = [theItemList objectAtIndex:2];
-        NSString *theDeviceVersion = [theItemList objectAtIndex:3];
-        
-        NSString *thePortNo = [theItemList objectAtIndex:4];
-        
-        NSString *theRatio = [theItemList objectAtIndex:5];
-        NSString *theProxyNo = [theItemList objectAtIndex:6];
-        
-        NSString * theMirrorPortNo = [theItemList objectAtIndex:7];
-        NSString * theControlPortNo = [theItemList objectAtIndex:8];
-        
-        
-        
+
         ConnectionItemInfo *theConnectionItemInfo = [[ConnectionItemInfo alloc] init];
-        CommunicatorWithDC *theSharedDCInterface = [CommunicatorWithDC sharedDCInterface];
-        theConnectionItemInfo.dicAgentInfos = _dicAgentInfos;
+//        theConnectionItemInfo.agentBuild = [info buildWDAResult:deviceUdid];
         
         DeviceInfos * deviceInfo = [[DeviceInfos alloc] init];
-        deviceInfo.deviceNo = [theDeviceId intValue];
-        deviceInfo.udid = theUdid;
-        deviceInfo.deviceName = theDeviceName;          
-        deviceInfo.productVersion = theDeviceVersion;
-        deviceInfo.appiumPort = thePortNo.intValue;
-        deviceInfo.ratio = theRatio.floatValue;
-        deviceInfo.appiumProxyPort = theProxyNo .intValue;
-        deviceInfo.mirrorPort = theMirrorPortNo.intValue;
-        deviceInfo.controlPort = theControlPortNo.intValue;
+        deviceInfo.deviceNo = [deviceNo intValue];
+        deviceInfo.udid = deviceUdid;
+        deviceInfo.ratio = deviceRatio.floatValue;
+//        deviceInfo.buildVersion = [info buildWDAResult:deviceUdid];
+        
         
         theConnectionItemInfo.deviceInfos = deviceInfo;
-        [theConnectionItemInfo initialize];                     // ControlAgent 객체가 생성된뒤 Tokens 를 넣어야 한다.
+        [theConnectionItemInfo initialize];
+        [theConnectionItemInfo registerFileNotificationWithSuccess:[NSString stringWithFormat:@"FAIL_FILEDOWN_%@",deviceNo] andFailed:[NSString stringWithFormat:@"SUCCESS_FILEDOWN_%@",deviceNo]];
+
+        [theConnectionItemInfo initUSBConnect];
+        [info.arrayDeivce addObject:dic];
         
-        theConnectionItemInfo.dicKorTokens = _dicKorTokens;
-        [theConnectionItemInfo registerFileNotificationWithSuccess:[NSString stringWithFormat:@"FAIL_FILEDOWN_%@",theDeviceId] andFailed:[NSString stringWithFormat:@"SUCCESS_FILEDOWN_%@",theDeviceId]];
-        [theConnectionItemInfo clearProcess];           // 전에 실행했던 프로세스가 남아있는지 확인하여 정리한다.
-        [theConnectionItemInfo initUSBConnect];         // DeviceInfo 정보가 들어가 있는 상태에서 호출해야 함.
-        [theConnectionItemInfo startDetachTimer];       // 남아있는 정보가 실재로 사용가능한 정보인지 확인함..
+        NSMutableDictionary * dicItem =
+        [NSMutableDictionary dictionaryWithObjectsAndKeys:
+         [NSNumber numberWithInt:[deviceNo intValue]], KEY_INDEX,
+         deviceUdid, KEY_UDID,
+         theConnectionItemInfo, KEY_OBJECT, nil];
         
-        NSMutableDictionary * dicItem = [NSMutableDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithInt:deviceInfo.deviceNo], KEY_INDEX, deviceInfo.udid, KEY_UDID, theConnectionItemInfo, KEY_OBJECT, nil];
-        
-//        [self.myConnectionItemList setObject:theConnectionItemInfo forKey:theDeviceId];
+        NSLog(@"dicItem(%@(%d)) = %@",KEY_INDEX,[deviceNo intValue],dicItem);
         [self.arrConnectionItemList addObject:dicItem];
     }
+    
+    
+    
+    
+    
+//	for (NSString *theItemInfo in theContentList) {
+//
+//		NSArray *theItemList = [theItemInfo componentsSeparatedByString:@"|-|"];
+//        NSString *deviceNo = [theItemList objectAtIndex:0];
+//        NSString *deviceUdid = [theItemList objectAtIndex:1];
+//        NSString *deviceRatio = [theItemList objectAtIndex:2];
+//
+//        NSMutableDictionary* dic = [[NSMutableDictionary alloc ] init];
+//        [dic setObject:deviceNo forKey:DEVICENO];
+//        [dic setObject:deviceUdid forKey:DEVICEUDID];
+//        [dic setObject:deviceRatio forKey:DEVICERATIO];
+//        [dic setObject:[info buildWDAResult:deviceUdid] forKey:DEVICEBUILD];
+//
+//        [info.arrayDeivce addObject:dic];
+//
+//
+//        ConnectionItemInfo *theConnectionItemInfo = [[ConnectionItemInfo alloc] init];
+//        CommunicatorWithDC *theSharedDCInterface = [CommunicatorWithDC sharedDCInterface];
+//        theConnectionItemInfo.agentBuild = [info buildWDAResult:deviceUdid];
+//        theConnectionItemInfo.deviceInfos = info;
+//        [theConnectionItemInfo initialize];                     // ControlAgent 객체가 생성된뒤 Tokens 를 넣어야 한다.
+//
+//        theConnectionItemInfo.dicKorTokens = _dicKorTokens;
+//    //        [theConnectionItemInfo registerFileNotificationWithSuccess:[NSString stringWithFormat:@"FAIL_FILEDOWN_%@",theDeviceId] andFailed:[NSString stringWithFormat:@"SUCCESS_FILEDOWN_%@",theDeviceId]];
+//        [theConnectionItemInfo clearProcess:deviceUdid];           // 전에 실행했던 프로세스가 남아있는지 확인하여 정리한다.
+//        [theConnectionItemInfo initUSBConnect];         // DeviceInfo 정보가 들어가 있는 상태에서 호출해야 함.
+//        [theConnectionItemInfo startDetachTimer];       // 남아있는 정보가 실재로 사용가능한 정보인지 확인함..
+//
+//        NSMutableDictionary * dicItem = [NSMutableDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithInt:deviceInfo.deviceNo], KEY_INDEX, deviceInfo.udid, KEY_UDID, theConnectionItemInfo, KEY_OBJECT, nil];
+//
+//    //        [self.myConnectionItemList setObject:theConnectionItemInfo forKey:theDeviceId];
+//        [self.arrConnectionItemList addObject:dicItem];
+//    }
 }
 
 - (void) initConnectionItemList {
@@ -669,6 +655,18 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 //        _deviceInfoMode = INFO_DEVICE_LIST;
 }
 
+-(BOOL)connectCheckDevice{
+    
+    NSString * output = [Utility launchTaskFromSh:[NSString stringWithFormat:@"idevice_id -l | grep %@", @"5099243099b114d9b73eddf078020adc674c1a46"]];
+    NSLog(@"output = %@",output);
+    if(output.length == 0){
+        NSLog(@"NO");
+        return NO;
+    }
+    NSLog(@"YES");
+    return YES;
+}
+
 /// @brief 지금은 사용하지 않음..
 - (int) getDeviceCount {
     int nCount = 0;
@@ -688,11 +686,53 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     return nCount;
 }
 
+
+// Slot번호|UDID|빌드정보|화면비율
+- (void)deviceInfoList{
+    
+    NSError* error = nil;
+    NSString* path = [NSString stringWithFormat:@"%@/%@",[Utility ManualDirectory],MAPPINGFILE];
+    NSString* content = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:&error];
+    DeviceInfos* info = [DeviceInfos shareDeviceInfos];
+    
+    if(error != nil){
+        NSLog(@"%@",error.description);
+    }else{
+        NSArray* contentList = [content componentsSeparatedByString:@"\n"];
+        for(NSString* item in contentList){
+            NSArray* itemList = [item componentsSeparatedByString:@"|-|"];
+            NSString *deviceNo = [itemList objectAtIndex:0];
+            NSString *deviceUdid = [itemList objectAtIndex:1];
+            NSString *deviceRatio = [itemList objectAtIndex:2];
+
+            NSMutableDictionary* dic = [[NSMutableDictionary alloc ] init];
+            [dic setObject:deviceNo forKey:DEVICENO];
+            [dic setObject:deviceUdid forKey:DEVICEUDID];
+            [dic setObject:deviceRatio forKey:DEVICERATIO];
+//            [dic setObject:[info buildWDAResult:deviceUdid] forKey:DEVICEBUILD];
+            
+            [info.arrayDeivce addObject:dic];
+        }
+        NSLog(@"info = %@",info.arrayDeivce);
+    }
+    ConnectionItemInfo *theConnectionItemInfo = [[ConnectionItemInfo alloc] init];
+//    [theConnectionItemInfo initUSBConnect];         // DeviceInfo 정보가 들어가 있는 상태에서 호출해야 함.
+//    [theConnectionItemInfo clearProcess];
+}
+
 /// @brief 서버 소켓을 생성하여 DC 와의 연결을 기다린다.
 - (void)startSocketServer:(int)deviceCount {
 	CommunicatorWithDC *theSharedDCInterface = [CommunicatorWithDC sharedDCInterface];
 	theSharedDCInterface.mainController = self;
-	[theSharedDCInterface startInterfaceWithDC];
+    theSharedDCInterface.devUdid = deviceUdid;    
+    
+    BOOL bDCSetting = [theSharedDCInterface startInterfaceWithDC];
+    if(!bDCSetting){
+        dispatch_async(dispatch_get_main_queue(), ^{
+            sleep(10);
+            [self performSelectorOnMainThread:@selector(appliyPort:) withObject:nil waitUntilDone:NO];
+        });
+    }
 }
 
 - (ConnectionItemInfo *)firstConnectionItemInfo {
@@ -705,10 +745,16 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 
 - (ConnectionItemInfo* )connectionItemInfoByDeviceNo:(int)argDeviceNo{
     
-    NSString * temp = [NSString stringWithFormat:@"%@ == %d", KEY_INDEX, argDeviceNo];
+//    NSString * temp = [NSString stringWithFormat:@"%@ == %d", KEY_INDEX, argDeviceNo];
+//    NSDictionary* dictTemp = [_arrConnectionItemList objectAtIndex:argDeviceNo];
+//    NSString* index = [dictTemp objectForKey:KEY_INDEX];
+//    ConnectionItemInfo* itemInfo = nil;
+//    itemInfo = [dictTemp objectForKey:KEY_OBJECT];
+    
+    NSString * temp = [NSString stringWithFormat:@"%@ = %d", KEY_INDEX, argDeviceNo];
     NSPredicate * predicate = [NSPredicate predicateWithFormat:temp];
     NSArray * results = [_arrConnectionItemList filteredArrayUsingPredicate:predicate];
-
+//
     ConnectionItemInfo * itemInfo = nil;
     if( results && [results count] ) {
         NSDictionary * dicItem = [results objectAtIndex:0];
@@ -732,9 +778,113 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     return udid;
 }
 
+
+
+/// @brief  ipa 파일에서 BundleId 를 얻어온다.
+- (NSString*) getBundleID:(NSString*)path
+{
+    //CFBundleExecutable
+    NSString* commandString = [NSString stringWithFormat:@"cd \"%@\" ; unzip -q \"%@/install.ipa\" -d temp ; APP_NAME=$(ls temp/Payload/) ; /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \"%@/temp/Payload/$APP_NAME/Info.plist\" ; rm -rf temp",
+                               [Utility managerDirectory],
+                               [Utility managerDirectory],
+                               [Utility managerDirectory]];
+    
+    NSTask* iTask =  [[NSTask alloc] init];
+    iTask.launchPath = @"/bin/bash";
+    
+    iTask.arguments  = [NSArray arrayWithObjects:
+                        @"-l", @"-c",
+                        commandString,
+                        nil];
+    NSPipe *pipe= [NSPipe pipe];
+    [iTask setStandardOutput: pipe];
+    
+    NSFileHandle *file = [pipe fileHandleForReading];
+    NSString *output = nil;
+//    NSLog(@"PATH = %@",commandString);
+    //mg
+//    [iTask launch];
+//    [iTask waitUntilExit];
+//    mg//s
+    if( [NSThread isMainThread] ) {
+        @autoreleasepool {
+            [iTask launch];
+            [iTask waitUntilExit];
+        }
+    } else {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            @autoreleasepool {
+//                [iTask launch];
+//                [iTask waitUntilExit];
+                NSError* error = nil;
+                if (@available(macOS 10.13, *)) {
+                    BOOL bSuccess = [iTask launchAndReturnError:&error];
+                    if(bSuccess){
+                        NSLog(@"성공");
+                    }else{
+                        NSLog(@"실패");
+                    }
+                    if(error){
+                        NSLog(@"%s %@",__FUNCTION__,error.description);
+                    }
+                }else{
+                    [iTask launch];
+                    [iTask waitUntilExit];
+                }
+            }
+        });
+    }
+//    NSError* error;
+//    if (@available(macOS 10.13, *)) {
+//        BOOL bSuccess = [iTask launchAndReturnError:&error];
+//        if(bSuccess){
+//            NSLog(@"성공");
+//        }else{
+//            NSLog(@"실패");
+//        }
+//        if(error){
+//            NSLog(@"%s %@",__FUNCTION__,error.description);
+//        }
+//    }else{
+//        [iTask launch];
+//        [iTask waitUntilExit];
+//    }
+
+    //mg//e
+    NSData *data = [file readDataToEndOfFile];
+    if(data == nil){
+        return nil;
+    }else{
+        output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
+        if(output == nil || output.length == 0){
+            return nil;
+        }
+    }
+    
+    
+    [file closeFile];
+    
+    output = [output stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    
+    NSRange the_range = [output rangeOfString:@"Exist" options:NSCaseInsensitiveSearch];
+    if (the_range.location != NSNotFound) {
+        DDLogError(@"BundleID not found:%@", output);
+        DDLogError(@"Use old method");
+        output = nil;
+    }
+    else {
+        DDLogWarn(@"BundleID = %@", output);
+    }
+    
+    return output;
+}
+
+
 - (IBAction)ResetAll:(id)sender {
 
     DDLogWarn(@"test");
+//    NSString* temp = [Utility cpuHardwareName];
+//    NSLog(@"hardware = %@",temp);
 
 //    NSString *path = [[NSBundle mainBundle] executablePath];
 ////
@@ -762,46 +912,45 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 //        [storage deleteCookie:cookie];
 //
 //    }
-    NSString * output = [Utility launchTaskFromBash:[NSString stringWithFormat:@"ps -ef | grep %@", @"lsof"]];
-    NSLog(@"output = %@",output);
-    if(output.length > 0){
-        output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
-        NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
-
-        NSMutableArray * arrPid = [NSMutableArray array];
-        for( NSString * outputProcessInfos in arrOut ) {
-            if( 0 == outputProcessInfos.length )
-                continue;
-            
-            if( [outputProcessInfos containsString:@"grep "] ) {
-                continue;
-            }
-           
-            NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
-            NSLog(@"compoment = %@",component);
-            
-            NSMutableArray* tempArray = [NSMutableArray array];
-            for(NSString* temp in component){
-                if(temp.length > 0){
-                    [tempArray addObject:temp];
-                }else{
-                }
-            }
-            NSLog(@"tempArray = %@",tempArray);
-            
-            if((int)tempArray.count > 3){
-                NSString* strPid = [tempArray objectAtIndex:2];
-                NSLog(@"strPid = %@",strPid);
-                if([strPid isEqualToString:@"1"]){
-                    strPid = [tempArray objectAtIndex:1];
-                }
-                NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPid];
-                int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
-                DDLogWarn(@"Kill Process Result : %d", result);
-
-            }
-        }
-    }
+//    NSString * output = [Utility launchTaskFromBash:[NSString stringWithFormat:@"ps -ef | grep %@", @"lsof"]];
+//    NSLog(@"output = %@",output);
+//    if(output.length > 0){
+//        output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+//        NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+//
+//        NSMutableArray * arrPid = [NSMutableArray array];
+//        for( NSString * outputProcessInfos in arrOut ) {
+//            if( 0 == outputProcessInfos.length )
+//                continue;
+//
+//            if( [outputProcessInfos containsString:@"grep "] ) {
+//                continue;
+//            }
+//
+//            NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
+////            NSLog(@"compoment = %@",component);
+//
+//            NSMutableArray* tempArray = [NSMutableArray array];
+//            for(NSString* temp in component){
+//                if(temp.length > 0){
+//                    [tempArray addObject:temp];
+//                }else{
+//                }
+//            }
+////            NSLog(@"tempArray = %@",tempArray);
+//
+//            if((int)tempArray.count > 3){
+//                NSString* strPid = [tempArray objectAtIndex:2];
+//                NSLog(@"strPid = %@",strPid);
+//                if([strPid isEqualToString:@"1"]){
+//                    strPid = [tempArray objectAtIndex:1];
+//                }
+//                NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPid];
+//                int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
+//                DDLogWarn(@"Kill Process Result : %d", result);
+//            }
+//        }
+//    }
 }
 
 -(void) restartManager2 {
@@ -823,18 +972,24 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     [[NSApplication sharedApplication] terminate:nil];
 }
 
-- (IBAction)connectDevice:(id)sender
+- (IBAction)restartDevice:(id)sender
 {
-    NSString * commandString = [NSString stringWithFormat:@"idevicediagnostics restart"];
+    NSString* temp = [Utility cpuHardwareName];
+    NSLog(@"hardware = %@ %@",temp,deviceUdid);
     
+//    [self connectCheckDevice];
+    
+
+    NSString * commandString = [NSString stringWithFormat:@"idevicediagnostics -u %@ restart",deviceUdid];
+
     NSTask * launchTask = [[NSTask alloc] init];
     launchTask.launchPath = @"/bin/bash";
     launchTask.arguments = @[@"-l", @"-c", commandString];
-    
+
     NSPipe * outputPipe = [[NSPipe alloc] init];
     [launchTask setStandardOutput:outputPipe];
     NSFileHandle * outputHandle = [outputPipe fileHandleForReading];
-    
+
     if( [NSThread isMainThread] ) {
         [launchTask launch];
     } else {
@@ -842,8 +997,25 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
             [launchTask launch];
         });
     }
+}
+
+
+-(void)killManagePort:(int)port{
+    @try
+    {
+        NSString *script = [NSString stringWithFormat:@"kill `lsof -t -i:%d`", port];
+        system([script UTF8String]);
+        system([@"killall -z lsof" UTF8String]);
+    }
+    @catch (NSException *exception)
+    {
+        NSLog(@"########################################################################");
+        NSLog(@"%@", exception.description);
+        NSLog(@"########################################################################");
+    }
 
 }
+
 
 - (IBAction)getPageSourceByXml:(id)sender {
     /*
@@ -869,120 +1041,6 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     [self showAlertOfKind:NSWarningAlertStyle WithTitle:@"로그삭제" AndMessage:@"해당 로그를 삭제 하시겠습니까?"];
 }
 
--(IBAction)saveLogFile:(id)sender
-{
-    DDLogWarn(@"%s",__FUNCTION__);
-    // resign as first responder the other controls
-    AppDelegate *appDelegate = (AppDelegate *)[NSApp delegate];
-    [appDelegate.window makeFirstResponder: nil];
-    
-    NSSavePanel* saveDlg = [NSSavePanel savePanel];
-    [saveDlg setTitle:@"로그 저장"];
-    [saveDlg setCanCreateDirectories:YES];
-
-
-    [saveDlg setAllowedFileTypes:@[@"txt",@"TXT"]];
-    [saveDlg beginSheetModalForWindow:appDelegate.window completionHandler:^(NSInteger result){
-        if (result == NSFileHandlingPanelOKButton)
-        {
-            NSURL*  theFile = [saveDlg URL];
-            DDLogWarn(@"%@",theFile);
-            // Write the contents in the new format.
-            NSString* path = [theFile path];
-
-            [[NSData data] writeToFile:path atomically:YES];
-
-            
-            NSFileHandle* handle = [NSFileHandle fileHandleForWritingAtPath:path];
-            [handle truncateFileAtOffset:[handle seekToEndOfFile]];
-            NSString* log = @"";
-            int nIndex = (int)[self.cmbLog indexOfSelectedItem];
-            if(nIndex == 0){
-                log = [[self.txtView textStorage] string];
-            }else if(nIndex == 1){
-                log = [[self.txtAppiumView textStorage] string];
-            }else if(nIndex == 2){
-                log = [[self.txtManagerView textStorage] string];
-            }
-            [handle writeData:[log dataUsingEncoding:NSUTF8StringEncoding]];
-            [handle closeFile];
-
-        }
-    }];
-}
-
--(IBAction)startLog:(id)sender
-{
-    DDLogInfo(@"%s",__FUNCTION__);
-    ConnectionItemInfo* itemInfo = [self connectionItemInfoByDeviceNo:2];
-    if(itemInfo.myDeviceLog == nil)
-        itemInfo.myDeviceLog = [[DeviceLog alloc] initWithDeviceNo:itemInfo.deviceInfos.deviceNo UDID:itemInfo.deviceInfos.udid withDelegate:itemInfo];
-    
-    [itemInfo.myDeviceLog startLogAtFirst];
-
-}
-
--(IBAction)expandAppLog:(id)sender
-{
-    DDLogWarn(@"%s",__FUNCTION__);
-    DDLogWarn(@"%f and %f",self.view.frame.size.width,self.view.frame.size.height);
-    
-    
-    DDLogWarn(@"%f and %f",self.tfAppLog.frame.origin.x,self.tfAppLog.frame.origin.y);
-    DDLogWarn(@"%f and %f",self.btnExpandAppLog.frame.origin.x,self.btnExpandAppLog.frame.origin.y);
-    DDLogWarn(@"%f and %f",self.scrAppLog.frame.origin.x,self.scrAppLog.frame.origin.y + self.scrAppLog.frame.size.height);
-    
-    
-    if([self.scrAppLog isHidden]){
-        [self.scrAppLog setHidden:NO];
-        
-        [self.tfAppLog setFrame:NSMakeRect(18, 233, 198, 17)];
-        [self.btnExpandAppLog setFrame:NSMakeRect(104, 235, 13, 13)];
-        
-
-        [self.statusField setFrame:NSMakeRect(self.statusField.frame.origin.x, self.statusField.frame.origin.y + 225
-                                              , self.statusField.frame.size.width
-                                              , self.statusField.frame.size.height - 225)];
-        
-        [self.appumField setFrame:NSMakeRect(self.appumField.frame.origin.x, self.appumField.frame.origin.y + 225
-                                              , self.appumField.frame.size.width
-                                              , self.appumField.frame.size.height - 225)];
-
-        
-        [self.managerField setFrame:NSMakeRect(self.managerField.frame.origin.x, self.managerField.frame.origin.y + 225
-                                              , self.managerField.frame.size.width
-                                              , self.managerField.frame.size.height - 225)];
-        
-        [self.btnRemoveLog setFrame:NSMakeRect(self.btnRemoveLog.frame.origin.x, self.btnRemoveLog.frame.origin.y + 225
-                                               , self.btnRemoveLog.frame.size.width
-                                               , self.btnRemoveLog.frame.size.height)];
-
-
-    }else{
-        [self.scrAppLog setHidden:YES];
-        [self.tfAppLog setFrame:NSMakeRect(18, 233 - 225, 198, 17)];
-        [self.btnExpandAppLog setFrame:NSMakeRect(104, 235 - 225, 13, 13)];
-
-        [self.statusField setFrame:NSMakeRect(self.statusField.frame.origin.x, self.statusField.frame.origin.y - 225
-                                              , self.statusField.frame.size.width
-                                              , self.statusField.frame.size.height + 225)];
-        
-        [self.appumField setFrame:NSMakeRect(self.appumField.frame.origin.x, self.appumField.frame.origin.y - 225
-                                              , self.appumField.frame.size.width
-                                              , self.appumField.frame.size.height + 225)];
-
-        
-        [self.managerField setFrame:NSMakeRect(self.managerField.frame.origin.x, self.managerField.frame.origin.y - 225
-                                              , self.managerField.frame.size.width
-                                              , self.managerField.frame.size.height + 225)];
-
-
-        [self.btnRemoveLog setFrame:NSMakeRect(self.btnRemoveLog.frame.origin.x, self.btnRemoveLog.frame.origin.y - 225
-                                               , self.btnRemoveLog.frame.size.width
-                                               , self.btnRemoveLog.frame.size.height)];
-
-    }
-}
 
 //not used
 - (void)killProcess {
@@ -1007,7 +1065,7 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 //    paragraphStyle.lineSpacing = FONT_SIZE/2;
     NSFont * labelFont = [NSFont fontWithName:FONT_HELVETICA size:FONT_SIZE];
     if(nType == TYPE_MANAGER){
-        labelFont = [NSFont fontWithName:FONT_HELVETICA size:13];
+        labelFont = [NSFont fontWithName:FONT_HELVETICA size:8];
     }
 //    NSColor * labelColor = [NSColor colorWithWhite:1 alpha:1];
     NSColor* labelColor;
@@ -1030,7 +1088,6 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
     [shadow setShadowColor : BLACK_SHADOW];
     [shadow setShadowOffset : CGSizeMake (1.0, 1.0)];
     [shadow setShadowBlurRadius : 1];
-
     
     NSAttributedString* stringToAppend = [[NSAttributedString alloc] initWithString:string attributes:@{
                                                                                                         NSParagraphStyleAttributeName : paragraphStyle,
@@ -1038,57 +1095,20 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
                                                                                                         NSFontAttributeName : labelFont,
                                                                                                         NSForegroundColorAttributeName : labelColor,
                                                                                                         NSShadowAttributeName : shadow }];
-    
-   
+
+
     dispatch_async(dispatch_get_main_queue(), ^{
         if(nType == 0){
-            [[self.txtView textStorage] appendAttributedString:stringToAppend];
-            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.statusField documentView] frame]) - NSHeight([[self.statusField contentView] bounds]));
-            [[self.statusField documentView] scrollPoint:bottom];
         }else if(nType == 1){
-            [[self.txtAppiumView textStorage] appendAttributedString:stringToAppend];
-            NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.appumField documentView] frame]) - NSHeight([[self.appumField contentView] bounds]));
-            [[self.appumField documentView] scrollPoint:bottom];
         }else if(nType == 2){
             [[self.txtManagerView textStorage] appendAttributedString:stringToAppend];
             NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.managerField documentView] frame]) - NSHeight([[self.managerField contentView] bounds]));
             [[self.managerField documentView] scrollPoint:bottom];
         }
     });
+    // sc
     // scrolls to the bottom
 }//appendStringValue
-
-- (void)setStringValue:(NSString*)string
-{
-    NSTextView *textfield = (NSTextView*)self.statusField.documentView;
-    [textfield setString:string];
-    
-    // scrolls to the bottom
-    NSPoint bottom = NSMakePoint(0.0, NSMaxY([[self.statusField documentView] frame]) - NSHeight([[self.statusField contentView] bounds]));
-    [[self.statusField documentView] scrollPoint:bottom];
-}
-
-- (void) processClearLogs {
-    int nIndex = (int)[self.cmbLog indexOfSelectedItem];
-    NSLog(@"%s(%d)",__FUNCTION__,nIndex);
-    
-    [self.txtView setString:@""];
-    [self.txtView.textStorage.mutableString setString:@""];
-    [self.txtView setNeedsDisplay:YES];
-    
-    [self.txtAppiumView setString:@""];
-    [self.txtAppiumView.textStorage.mutableString setString:@""];
-    [self.txtAppiumView setNeedsDisplay:YES];
-    
-    [self.txtManagerView setString:@""];
-    [self.txtManagerView.textStorage.mutableString setString:@""];
-    [self.txtManagerView setNeedsDisplay:YES];
-    
-    [self.txtDC setString:@""];
-    [self.txtDC.textStorage.mutableString setString:@""];
-    [self.txtDC setNeedsDisplay:YES];
-}
-
 
 - (void) saveCoSTEPMappingFile:(DeviceInfos *)deviceInfo {
 // DeviceNo |-|   UDID   |-| devicename |-| device version |-| appium port |-| device ratio |-| ios-webkit port
@@ -1247,71 +1267,281 @@ typedef NS_ENUM(NSInteger, LOG_TYPE) {
 
 - (void)showAlertOfKind:(NSAlertStyle)style WithTitle:(NSString *)title AndMessage:(NSString *)message
 {
-    // Show a critical alert
-    NSAlert *alert = [[NSAlert alloc] init];
-    [alert addButtonWithTitle:@"OK"];
-    [alert addButtonWithTitle:@"CANCEL"];
-    [alert setMessageText:title];
-    [alert setInformativeText:message];
-    [alert setAlertStyle:style];
-    
-    NSModalResponse responseTag = [alert runModal];
-    if(responseTag == NSAlertFirstButtonReturn){
-        [self processClearLogs];
-    } else {
-        
-    }
 }
 
 #pragma mark - <Timer Delegate>
 - (void) onClearLogTimer:(NSTimer *)theTimer {
-    [self processClearLogs];
 }
+
+-(IBAction)appliyPort:(id)sender{
+
+    NSLog(@"%s -- %d",__FUNCTION__,(int)self.comboBox.indexOfSelectedItem);
+    [self showProgressStart:YES];
+    int nIndex = (int)self.comboBox.indexOfSelectedItem;
+    int nValue = [self.comboBox intValue];
+    
+    ConnectionItemInfo* itemInfo = [self connectionItemInfoByDeviceNo:nIndex+1];
+    CommunicatorWithDC *theSharedDCInterface = [CommunicatorWithDC sharedDCInterface];
+    if([theSharedDCInterface disconnectSocket]){
+        dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+        dispatch_async(queue, ^{
+            [self showProgressStart:YES];
+            NSLog(@"==%@",itemInfo.deviceInfos.udid);
+            deviceUdid = itemInfo.deviceInfos.udid;
+            NSLog(@"udid = %@",deviceUdid);
+            [itemInfo clearProcess:deviceUdid andLog:YES];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [NSThread sleepForTimeInterval:5];
+                [theSharedDCInterface connectSocket:nIndex andPort:(nValue-1)];
+                [self showProgressStart:NO];
+            });
+        });
+    }
+}
+
+-(IBAction)restartManager:(id)sender{
+//    [Utility restartManager];
+    [self getBundleID:@"test"];
+}
+
 
 #pragma mark - ComboBox Delegate
 
 - (void)comboBoxSelectionIsChanging:(NSNotification *)notification
 {
-    DDLogWarn(@"%d",(int)[self.cmbLog indexOfSelectedItem]);
-    int nIndex = (int)[self.cmbLog indexOfSelectedItem];
-    [self showLogField:nIndex];
+    nComboNumber = (int)self.comboBox.indexOfSelectedItem;
 }
+
+-(void)showProgressStart:(BOOL)bShow{
+     if( [NSThread isMainThread] ) {
+       if(bShow){
+           [self.comboBox setEditable:NO];
+           [self.boxBuildLoading setHidden:NO];
+           [self.indicator startAnimation:nil];
+       }else{
+           [self.boxBuildLoading setHidden:YES];
+           [self.indicator stopAnimation:nil];
+           [self.comboBox setEditable:YES];
+       }
+     }else{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if(bShow){
+                [self.comboBox setEditable:NO];
+                [self.boxBuildLoading setHidden:NO];
+                [self.indicator startAnimation:nil];
+            }else{
+                [self.boxBuildLoading setHidden:YES];
+                [self.indicator stopAnimation:nil];
+                [self.comboBox setEditable:YES];
+            }
+        });
+     }
+}
+
+
 
 -(void)showLogField:(int)index
 {
-    if(index == 0){
-        [self.statusField setHidden:NO];
-        [self.appumField setHidden:YES];
-        [self.managerField setHidden:YES];
+
+}
+
+-(IBAction)clickRestart:(id)sender{
+    NSLog(@"%d",(int)[self.btnRestartManager state]);
+    BOOL boolValue = YES;
+    if((int)[self.btnRestartManager state] == 0){
+        boolValue = NO;
+    }
+    [[NSUserDefaults standardUserDefaults] setBool:boolValue forKey:MANAGERRESTART];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+
+    
+}
+
+- (void) readData:(NSData *)readData withHandler:(id)handler {
+    NSString *outStr = [[NSString alloc] initWithData:readData encoding:NSUTF8StringEncoding];
+//    DDLogInfo(@"====== outStr===== %@", outStr);//manage
+
+//    [self manageLog:outStr];
+}
+
+-(void)startDeviceLog:(NSString *)udid{
+    
+}
+
+//-(void)logStart:(NSString *)udid
+-(void)logStart:(NSString *)udid logSearch:(NSString *)search identifier:(NSString* )identifier level: (char)level
+{
+    dispatch_sync(dispatch_get_main_queue(), ^{
+        if(self.logTask != nil){
+            self.logTask = nil;
+        }
+        self.logTask = [[NSTask alloc] init];
         
-        [self.txtView setNeedsDisplay:YES];
+        NSString * commandString;
+        if(identifier)
+        commandString = [NSString stringWithFormat:@"idevicesyslog -u %@ -K", udid];
         
-        [self.tfLogInfo setStringValue:@"DC Log"];
-    }else if(index == 1){
-        [self.statusField setHidden:YES];
-        [self.appumField setHidden:NO];
-        [self.managerField setHidden:YES];
         
-        [self.tfLogInfo setStringValue:@"Appum Log"];
+        self.logTask.launchPath = @"/bin/bash";
+        self.logTask.arguments = @[@"-l", @"-c", commandString];
         
-        [self.appumField setNeedsDisplay:YES];
-    }else if(index == 2){
-        [self.statusField setHidden:YES];
-        [self.appumField setHidden:YES];
-        [self.managerField setHidden:NO];
+//        NSPipe* pipe = [NSPipe pipe];
+        if(self.pipe != nil){
+            self.pipe = nil;
+        }
+        self.pipe = [NSPipe pipe];
+        [self.logTask setStandardOutput:self.pipe];
         
-        [self.tfLogInfo setStringValue:@"Manager Log"];
-        [self.appumField setNeedsDisplay:YES];
+        
+        [self.logTask launch];
+        
+        // BlockSelf 를 사용하면 setReadabilityHandler 안으로 들어가지 못함.. 왜 그런지는 확인해봐야 함..
+        [[self.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
+        self.pipeNotiObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSFileHandleDataAvailableNotification object:[self.pipe fileHandleForReading] queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+            
+            DDLogVerbose(@"addObserverForName");
+
+            [[self.pipe fileHandleForReading] setReadabilityHandler:^(NSFileHandle *file) {
+                NSData * output = [file availableData];
+                if( [self respondsToSelector:@selector(readData:withHandler:)] ) {
+                    if(output.length > 0){
+                        [self readData:output withHandler:self];
+                        [[self.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
+                    }else{
+                        [[NSNotificationCenter defaultCenter] removeObserver:self.pipeNotiObserver];
+                                                
+                        [self.pipe removeObserver:self.pipeNotiObserver];
+                        [self.pipe closeFile];
+                        self.pipeNotiObserver = nil;
+                        
+                    }
+                }
+            }];
+        }];
+        
+        [self.logTask setTerminationHandler:^(NSTask *task) {
+            // do your stuff on completion
+            __weak typeof(self) weakSelf = self;
+            @try {
+                [weakSelf.logTask.standardOutput fileHandleForReading].readabilityHandler = nil;
+            } @catch (NSException *exception) {
+                NSLog(@"standardOutput except = %@",exception.description);
+            }
+
+            @try {
+                [weakSelf.logTask.standardError fileHandleForReading].readabilityHandler = nil;
+            } @catch (NSException *exception) {
+                NSLog(@"standardOutput except = %@",exception.description);
+            }
+        }];
+    });
+}
+
+-(void)logStop{
+    [[self.pipe fileHandleForReading] closeFile];
+    
+    for(int i = 0; i< 20; i++){
+        [self.logTask terminate];
+    }
+    
+//        sleep(2);
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:NSFileHandleDataAvailableNotification];
+    [[NSNotificationCenter defaultCenter] removeObserver:self.pipeNotiObserver];
+    [[NSNotificationCenter defaultCenter] removeObserver:NSFileHandleDataAvailableNotification name:nil object:[self.pipe fileHandleForReading]];
+    self.pipeNotiObserver = nil;
+    self.pipe = nil;
+    self.logTask = nil;
+}
+
+
+-(IBAction)startDeviceList:(id)sender{
+    if(_arrStartAppList != nil){
+        _arrStartAppList = nil;
+    }
+    _arrStartAppList = [self deviceList];
+    NSLog(@"%@",_arrStartAppList);
+}
+
+-(NSMutableArray *)deviceList{
+    NSTask *task = [[NSTask alloc] init];
+    NSString* cpu = [Utility cpuHardwareName];
+    
+    if([cpu isEqualToString:@"x86_64"]){
+        [task setLaunchPath: @"/usr/local/bin/ios-deploy"];
+        [task setArguments: [[NSArray alloc] initWithObjects:@"-i",@"00008110-000E4CA83E82801E" ,@"-B", nil]];
+    }else{
+        [task setLaunchPath: @"/opt/homebrew/bin/ios-deploy"];
+        [task setArguments: [[NSArray alloc] initWithObjects:@"-i",@"00008110-000E4CA83E82801E" ,@"-B", nil]];
+    }
+    if(![[NSFileManager defaultManager] isExecutableFileAtPath:[task launchPath]] || [[NSWorkspace sharedWorkspace] isFilePackageAtPath:[task launchPath]]){
+        DDLogDebug(@"launchPath Error = %@",[task launchPath]);
+        return nil;
+    }else{
+        NSLog(@"####################");
+    }
+
+    NSFileHandle *file = nil;
+    //출력되는 값
+    @try{
+        NSPipe *pipe= [NSPipe pipe];
+        [task setStandardOutput: pipe];
+        file = [pipe fileHandleForReading];
+    }
+    @catch(NSException * exception){
+        DDLogDebug(@"NSException Error = %@ , %@",[exception name], [exception reason]);
+        return nil;
+    }
+
+    __block NSError* error = nil;
+    __block BOOL bTask = YES;
+
+    bTask = [task launchAndReturnError:&error];
+    [task waitUntilExit];
+
+    if(error){
+         DDLogError(@"DEVICE LIST ERROR = %@",error.description);
+        return nil;
+     }else{
+         DDLogDebug(@"DEVICE LIST SUCCESS = %d",bTask);
+         NSData *data = [file readDataToEndOfFile];
+         NSString *output = [[NSString alloc] initWithData:data encoding: NSUTF8StringEncoding];
+         [file closeFile];
+         [task terminate];
+         task = nil;
+
+         NSArray* list = nil;
+         list = [output componentsSeparatedByString:@"\n"];
+         NSMutableArray * arrAppList = [[NSMutableArray alloc] init];
+         if(list != nil) {
+             for(NSString* appId in list) {
+                 if([appId hasPrefix:@"Skipping"] == NO && [appId hasPrefix:@"[." ] == NO){
+                     if(appId.length > 0 && ![appId containsString:@"com.apple"]){
+                        [arrAppList addObject:appId];
+                     }
+
+                 }
+             }
+
+         }
+         
+         NSLog(@"arr app list = %@",arrAppList);
+         return arrAppList;
+     }
+    
+}
+
+-(IBAction)endDeviceList:(id)sender{
+    
+    NSMutableArray* arrLastAppList = [self deviceList];
+    NSLog(@"%@",arrLastAppList);
+    for(NSString* bundleId in arrLastAppList){
+        if([_arrStartAppList containsObject:bundleId]){
+//            NSLog(@"앱이 있네용");
+        }else{
+            NSLog(@"앱이 없네용 %@",bundleId);
+        }
     }
 }
-
--(IBAction)clearDCLog:(id)sender{
-    DDLogInfo(@"%s",__FUNCTION__);
-    [self.txtDC setString:@""];
-    [self.txtDC.textStorage.mutableString setString:@""];
-    [self.txtDC setNeedsDisplay:YES];
-
-}
-
 
 @end

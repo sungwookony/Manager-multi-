@@ -79,6 +79,7 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 @property (nonatomic, weak) id<ControlAgentDelegate> customDelegate;
 @property (nonatomic, strong) DeviceInfos   * deviceInfos;
 @property (nonatomic, assign) BOOL          bLaunchDone;            // 중요!! LaunchDone = YES 는 Agent 를 사용할 수 있는 상태가 된 걸 의미 함. Appium 과 Instruments 는 App 을 설치하여 실행한뒤, WebDriveragent 는 WebDriverAgentRunner 를 설치하여 실행한 뒤 이며 HomeScreen 상태이다.
+@property (nonatomic, assign) BOOL          bAliveLaunch;
 @property (nonatomic, assign) int           nLockSetting;
 @property (nonatomic, assign) BOOL          bLaunchBundleID;
 @property (nonatomic, strong) NSString      * prevBundleId;
@@ -102,6 +103,7 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 //mg//- (BOOL)launchAppWithBundleID:(NSString *)bundleID;
 - (void)launchAppWithFilePath;
 
+
 //=== STOP
 - (void)finishControlAgent:(NSDictionary *)dicBundleIds;
 
@@ -119,7 +121,7 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 - (void)doSwipeAtX1:(int)argX1 andY1:(int)argY1 andX2:(int)argX2 andY2:(int)argY2;
 
 //==== 하드키
-- (void)hardKeyEvent:(int)nKey longpress:(int)nType;
+- (void)hardKeyEvent:(int)nKey longpress:(int)nType andReturn:(BOOL)bResponse;
 - (void)homescreen;
 
 //==== Text 입력
@@ -156,10 +158,15 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 
 - (BOOL)getStatus;
 
+-(BOOL)sendKaKaoResult:(NSString *)kakaoURL;
+
+
 //Safari 초기화 테스트
 - (void)clearSafari;
-- (void)terminateApp:(NSString *)bundleId;
-- (void)launchApp:(NSString *)bundleId;
+- (BOOL)terminateApp:(NSString *)bundleId;
+//- (void)launchApp:(NSString *)bundleId;
+- (BOOL)launchApp:(NSString *)bundleId;
+- (BOOL)launchAppWithBundleID:(NSString *)bundleID;
 
 @end
 
@@ -168,6 +175,7 @@ typedef NS_ENUM(NSInteger, REMOTE_KEY_TYPE) {
 @required
 - (void) agentCtrlLaunchSuccessed;
 - (void) agentCtrlLaunchFailed;
+- (void)agentCtrlRelaunchSuccess;
 
 - (void) applicationLaunchSuccessed;
 - (void) applicationLaunchFailed:(NSString *)description;

@@ -37,7 +37,14 @@
 
 @property (nonatomic, strong) DeviceLog     * myDeviceLog;
 @property (nonatomic, strong) NSDictionary  * dicKorTokens;
-@property (nonatomic, strong) NSDictionary  * dicAgentInfos;
+//@property (nonatomic, strong) NSDictionary  * dicAgentInfos;
+@property (nonatomic, strong) NSString  * agentBuild;
+
+//LOG
+@property (nonatomic, strong) NSTask *logTask;
+@property (nonatomic, strong) id    pipe;
+@property (nonatomic, strong) id    pipeNotiObserver;
+//
 
 
 
@@ -60,7 +67,7 @@
 - (void)startLogSearch:(NSString *)search identifier:(NSString* )identifier level: (char)level;
 - (void)stopLog;
 //====
-- (void)hardKeyEvent:(int)nKey longpress:(int)nType;
+- (void)hardKeyEvent:(int)nKey longpress:(int)nType andReturn:(BOOL)bResponse;
 //=====
 - (void)uploadDumpFile:(NSString*)url;
 //=====
@@ -82,10 +89,12 @@
 - (BOOL)deviceGetStatus;
 
 //===== 초기화
-- (void)removeApp:(NSString *)appId; //mg//20180509//uninstall
-- (void)removeInstalledApp:(BOOL)CMDCLEAR;
-- (void)clearProcess;
+- (BOOL)removeApp:(NSString *)appId; //mg//20180509//uninstall
+- (BOOL)removeInstalledApp:(BOOL)CMDCLEAR;
+- (void) clearProcess:(NSString*)udid andLog:(BOOL)bLogClear;
 - (void)resetDevice;
+
+- (BOOL)terminateActiveApp;
 
 - (void)terminateApp;
 

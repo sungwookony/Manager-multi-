@@ -26,6 +26,9 @@
 
 
 @property (nonatomic, strong) NSTask *logTask;
+@property (nonatomic, strong) id    pipe;
+@property (nonatomic, strong) id    pipeNotiObserver;
+
 @property (nonatomic, strong) NSString *logSearch;
 @property (nonatomic, strong) NSString *logIdentifier;
 @property (nonatomic, strong) NSString *udid;
@@ -34,6 +37,7 @@
 //swccc 설치된 app name 추가
 @property (nonatomic, strong) NSString *appName;
 
+@property (nonatomic, assign) int osVersion;
 
 @property (nonatomic, assign) int logLevel;
 @property (nonatomic, assign) int deviceNo;
@@ -41,6 +45,7 @@
 @property (nonatomic, assign) BOOL bLogStarted;
 
 - (id)initWithDeviceNo:(int)argDeviceNo UDID: (NSString* ) argUDID withDelegate:(id<DeviceLogDelegate>)delegate;
+- (id)initWithDeviceNo:(int)argDeviceNo UDID: (NSString* ) argUDID deviceVersion:(NSString *)deviceVersion withDelegate:(id<DeviceLogDelegate>)delegate;
 - (void)startLogAtFirst;
 //- (void)startLog:(NSString *)search identifier:(NSString* )identifier level: (char)level;
 - (void)startLog:(NSString *)search identifier:(NSString* )identifier level: (char)level bundleID:(NSString *)bundleID appName:(NSString *)appName;

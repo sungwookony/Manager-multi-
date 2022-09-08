@@ -85,7 +85,7 @@
 #pragma mark - <NSNotication>
 /// @breif      AppDelegate 에서 발생한 Notification 을 받아서 정리함.
 - (void) applicationWillTerminate:(NSNotification *)notification {
-    [self closeIProxy];
+//    [self closeIProxy];
     
 #ifdef USE_LOG_RESOURCE
     [_logWriteFile closeFile];
@@ -93,7 +93,7 @@
 }
 
 - (void) taskTerminated:(NSNotification *)notification {
-    [self stopIProxyTask];
+//    [self stopIProxyTask];
 }
 
 
@@ -161,38 +161,47 @@
 /// @brief      iproxy 타스크를 실행시킨다.
 - (void) startIProxyTask {
     @try{
-        [self stopIProxyTask];
-        
         DDLogDebug(@"%s",__FUNCTION__);
+        if(_myIProxyTask){
+        }else{
+            int nPortNum = RESOURCE_PORT + _deviceNo;
+            DDLogInfo(@"%s and %d",__FUNCTION__,_deviceNo);
+            NSString * commandString = [NSString stringWithFormat:@"iproxy %d %d -u %@", nPortNum, nPortNum, _udid];
         
-        int nPortNum = RESOURCE_PORT + _deviceNo;
-        DDLogInfo(@"%s and %d",__FUNCTION__,_deviceNo);
-        NSString * commandString = [NSString stringWithFormat:@"iproxy %d %d %@", nPortNum, nPortNum, _udid];
-        
-        _myIProxyTask = [[NSTask alloc] init];
-        _myIProxyTask.launchPath = @"/bin/bash";
-        _myIProxyTask.arguments = @[@"-l", @"-c", commandString];
-        
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskTerminated:) name:NSTaskDidTerminateNotification object:_myIProxyTask];
-        
-        _communicatorWithIproxyHandler = [[PipeHandler alloc] initWithDelegate:self];
-        _communicatorWithIproxyErrorHandler = [[PipeHandler alloc] initWithDelegate:self];
-        [_communicatorWithIproxyHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_OUTPUT];
-        [_communicatorWithIproxyErrorHandler setReadHandlerForTask:_myIProxyTask withKind:PIPE_ERROR];
+            _myIProxyTask = [[NSTask alloc] init];
+            NSString* cpu = [Utility cpuHardwareName];
+            if([cpu isEqualToString:@"x86_64"]){
+                _myIProxyTask.launchPath = @"/bin/bash";
+                _myIProxyTask.arguments = @[@"-l", @"-c", commandString];
+            }else{
+                NSString* portStr = [NSString stringWithFormat:@"%d",nPortNum];
+                NSArray *arguments = [NSArray arrayWithObjects:
+                                      portStr,
+                                      portStr,
+                                      @"-u",
+                                      _udid,
+                                      nil];
 
-        //mg//s
-        if( [NSThread isMainThread] ) {
-            @autoreleasepool {
-                [_myIProxyTask launch];
+                [_myIProxyTask setArguments:arguments];
             }
-        } else {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                DDLogDebug(@"start iproxy task");
+            
+            
+            [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskTerminated:) name:NSTaskDidTerminateNotification object:_myIProxyTask];
+
+            //mg//s
+            if( [NSThread isMainThread] ) {
                 @autoreleasepool {
                     [_myIProxyTask launch];
                 }
-            });
-        }
+            } else {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    DDLogDebug(@"start iproxy task");
+                    @autoreleasepool {
+                        [_myIProxyTask launch];
+                    }
+                });
+            }
+        }  
     }
     @catch(NSException* ex){
         DDLogError(@"%@",ex.description);
@@ -349,8 +358,9 @@
         
         if( [customDelegate respondsToSelector:@selector(didDisconnectedFromResourceApp)] )
             [customDelegate didDisconnectedFromResourceApp];
-    } else
+    } else{
         DDLogInfo(@"resource app connect succeeded");
+    }
     
 #ifdef USE_LOG_RESOURCE
     blockSelf.logWriteFile = [[LogWriteToFile alloc] init];
@@ -401,6 +411,7 @@
             return NO;
     }
     NSLog(@"####### cmd = (%@) ##########",cmd);
+    
     [_connectSocket writeData:dataCmd withTimeout:-1 tag:0];
     return YES;
 }

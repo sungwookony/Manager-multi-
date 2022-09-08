@@ -16,6 +16,9 @@
     
     NSString* appName;
     NSString* appName2;
+    
+    
+    
 }
 
 - (ConnectionItemInfo *)firstConnectionItemInfo;
@@ -23,6 +26,14 @@
 - (NSString *)udidByDeviceNo:(int)argDeviceNo;
 - (void)killProcess;
 
+
+-(void)logStart:(NSString *)udid logSearch:(NSString *)search identifier:(NSString* )identifier level: (char)level;
+-(void)logStop;
+
+@property (nonatomic, strong) NSTask *logTask;
+
+@property (nonatomic, strong) id    pipe;
+@property (nonatomic, strong) id    pipeNotiObserver;
 @property (weak) IBOutlet NSView *dcView;
 
 @end

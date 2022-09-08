@@ -35,59 +35,55 @@
     
     //Sentry 적용
     NSError *error = nil;
-    SentryClient *client = [[SentryClient alloc] initWithDsn:@"https://5ed57147a5eb4bfd9996af3f51ab5e26@sentry.io/1375928" didFailWithError:&error];
-    SentryClient.sharedClient = client;
-    [SentryClient.sharedClient startCrashHandlerWithError:&error];
-    if (nil != error) {
-        NSLog(@"%@", error);
-    }
+//    SentryClient *client = [[SentryClient alloc] initWithDsn:@"https://5ed57147a5eb4bfd9996af3f51ab5e26@sentry.io/1375928" didFailWithError:&error];
+//    SentryClient.sharedClient = client;
+//    [SentryClient.sharedClient startCrashHandlerWithError:&error];
+//    if (nil != error) {
+//        NSLog(@"%@", error);
+//    }
     
     
     //DDLOG 설정
 //    [DDLog addLogger:[DDASLLogger sharedInstance]]; //sends log statements to Apple System Logger, so they show up on Console.app
     [DDLog addLogger:[DDTTYLogger sharedInstance]]; //sends log statements to Xcode console - if available
     
-    //mg//file logger
-    //log directory
-    /*
-    NSString * logDirectory = [NSString stringWithFormat:@"%@/LOG", [Utility managerDirectory]];
-    if(![[NSFileManager defaultManager] fileExistsAtPath:(NSString *)logDirectory]) {
-        NSError *error;
-        
-        if (![[NSFileManager defaultManager] createDirectoryAtPath:logDirectory
-                                       withIntermediateDirectories:YES attributes:nil error:&error])
-            DDLogError(@"Failed to create log directory : %@", error);
-    }
-    
-    DDLogFileManagerDefault *documentsFileManager = [[DDLogFileManagerDefault alloc]
-                                                     initWithLogsDirectory:logDirectory];
-    DDFileLogger *fileLogger = [[DDFileLogger alloc]
-                                initWithLogFileManager:documentsFileManager];
-    
-    fileLogger.logFormatter = [[ManagerLogFileFormat alloc] init];
-    fileLogger.rollingFrequency = 60 * 60 * 24; // 24 hour rolling
-    fileLogger.logFileManager.maximumNumberOfLogFiles = 30;//7;//to keep a week's worth of log files on the system.
-    //fileLogger.maximumFileSize = 1024*1024*30;//30M
-    
-    [DDLog addLogger:fileLogger];
-     */
-    //DDLogInfo(@"log file at: %@", [[fileLogger currentLogFileInfo] filePath]);
-    
-    
-    
-
     //Crush발생시에 로그 발생
     NSSetUncaughtExceptionHandler(&uncauthExceptionHandler);
     
         
      self.mainVC = [[MainViewController alloc] initWithNibName:@"MainViewController" bundle:nil];
     
-    [self.window setFrame:NSMakeRect(100.0, 100.0, 900.0, 700.0) display:YES];
+//    [self.window setFrame:NSMakeRect(100.0, 100.0, 900.0, 700.0) display:YES];
+    NSString* bundleID = [[NSBundle mainBundle] bundleIdentifier];
+    NSLog(@"bundleID = %@",bundleID);
+    if([bundleID containsString:@"Manager1"]){
+        [self.window setFrame:NSMakeRect(0.0, 700.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager2"]){
+        [self.window setFrame:NSMakeRect(300.0, 700.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager3"]){
+        [self.window setFrame:NSMakeRect(600.0, 700.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager4"]){
+        [self.window setFrame:NSMakeRect(900.0, 700.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager5"]){
+        [self.window setFrame:NSMakeRect(0.0, 400.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager6"]){
+        [self.window setFrame:NSMakeRect(300.0, 400.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager7"]){
+        [self.window setFrame:NSMakeRect(600.0, 400.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager8"]){
+        [self.window setFrame:NSMakeRect(900.0, 400.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager9"]){
+        [self.window setFrame:NSMakeRect(0.0, 100.0, 300.0, 300.0) display:YES animate:YES];
+    }else if([bundleID containsString:@"Manager10"]){
+        [self.window setFrame:NSMakeRect(300.0, 100.0, 300.0, 300.0) display:YES animate:YES];
+    }
     
     [self.window.contentView addSubview:self.mainVC.view];
-    [self.window setContentMinSize:NSMakeSize(700, 500)];
+    [self.window setContentMinSize:NSMakeSize(400, 400)];
+    [self.window setContentMaxSize:NSMakeSize(400, 400)];
+    
 
-    NSString* version = [NSString stringWithFormat:@"ONYCOM iOS Manager [%@]",[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"]];
+    NSString* version = [NSString stringWithFormat:@"ONYCOM iOS Multi [%@]",[[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"]];
     
     [self.window setTitle:version];
     
@@ -95,7 +91,7 @@
     
 //    [self.mainVC.dcView.window setFrame:NSMakeRect(1020, 100, 300, 700) display:YES];
 //    [self.mainVC.dcView.window setTitle:@"DC"];
-    [self.mainVC.dcView.window setIsVisible:NO];
+//    [self.mainVC.dcView.window setIsVisible:NO];
     
 }
 
@@ -109,33 +105,34 @@
  */
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
     // Insert code here to tear down your application
-    DDLogInfo(@"-=applicationWillTerminate=");
+    DDLogInfo(@"-=applicationWillTerminate= %@",aNotification.description);
 //    [self.mainVC killProcess];
     
+    
     //mg//s
-    NSString * output = [Utility launchTaskFromBash:[NSString stringWithFormat:@"ps -ef | grep idevicedebug"]];
-    output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
-    NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
-    
-    NSMutableArray * arrPid = [NSMutableArray array];
-
-    for( NSString * outputProcessInfos in arrOut ) {
-        if( 0 == outputProcessInfos.length )
-            continue;
-        
-        if( [outputProcessInfos containsString:@"grep "] )
-            continue;
-        
-        NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
-        [arrPid addObject:[component objectAtIndex:3]];
-    }
-    
-    if( arrPid.count ) {
-        NSString * strPids = [arrPid componentsJoinedByString:@" "];
-        NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPids];
-        int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
-        DDLogVerbose(@"kill process result = %d", result);
-    }
+//    NSString * output = [Utility launchTaskFromBash:[NSString stringWithFormat:@"ps -ef | grep idevicedebug"]];
+//    output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+//    NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+//    
+//    NSMutableArray * arrPid = [NSMutableArray array];
+//
+//    for( NSString * outputProcessInfos in arrOut ) {
+//        if( 0 == outputProcessInfos.length )
+//            continue;
+//        
+//        if( [outputProcessInfos containsString:@"grep "] )
+//            continue;
+//        
+//        NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
+//        [arrPid addObject:[component objectAtIndex:3]];
+//    }
+//    
+//    if( arrPid.count ) {
+//        NSString * strPids = [arrPid componentsJoinedByString:@" "];
+//        NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPids];
+//        int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
+//        DDLogVerbose(@"kill process result = %d", result);
+//    }
     //mg//e
     
     [[NSNotificationCenter defaultCenter] postNotificationName:ApplicationWillTerminateNotification object:nil];
@@ -177,23 +174,29 @@ void uncauthExceptionHandler(NSException *exception)
 }
 
 void restartManager() {
-    DDLogError(@"1%s", __FUNCTION__);
+//    DDLogError(@"1%s", __FUNCTION__);
+//
+//    NSString* mgr = nil;
+//
+//    NSArray* array = [[[NSBundle mainBundle] bundlePath] componentsSeparatedByString:@"/"];
+//    int nTotalCount = (int)[array count];
+//    NSString* appName = [array objectAtIndex:nTotalCount-1];
+//    DDLogInfo(@"AppName = %@",appName);
+//    if([appName isEqualToString:@"Manager.app"]){
+//        mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
+//    }else{
+//        mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
+//    }
+//
+//    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
+////    exit(0);
+//    DDLogError(@"%s", __FUNCTION__);
+    NSString* path = [[NSBundle mainBundle] executablePath];
+    NSTask* restartTask = [[NSTask alloc] init];
+    restartTask.launchPath = path;
+    [restartTask launch];
     
-    NSString* mgr = nil;
-    
-    NSArray* array = [[[NSBundle mainBundle] bundlePath] componentsSeparatedByString:@"/"];
-    int nTotalCount = (int)[array count];
-    NSString* appName = [array objectAtIndex:nTotalCount-1];
-    DDLogInfo(@"AppName = %@",appName);
-    if([appName isEqualToString:@"Manager.app"]){
-        mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
-    }else{
-        mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
-    }
-    
-    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
-//    exit(0);
-    DDLogError(@"%s", __FUNCTION__);
+    [[NSApplication sharedApplication] terminate:nil];
 }
 
 @end

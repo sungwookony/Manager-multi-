@@ -16,10 +16,13 @@
 @interface CommunicatorWithDC : NSObject
 @property (nonatomic, weak)     MainViewController *mainController;
 
+@property (nonatomic, assign) NSString* devUdid;
+
 + (CommunicatorWithDC *)sharedDCInterface;
+- (BOOL)startInterfaceWithDC;
+- (BOOL)disconnectSocket;
+- (void)connectSocket:(int)nNumber andPort:(int)nValue;
 
-
-- (void)startInterfaceWithDC;
 //- (void)sendLogData:(NSData *)argLogPacket;
 - (void)sendLogData:(NSData *)argLogPacket deviceNo:(int)argDeviceNo ;
 - (void)commonResponse:(BOOL)bSueccss deviceNo:(int)argDeviceNo;
@@ -37,5 +40,8 @@
 
 - (void) recvdResourcePacket:(NSData *)packet andDeviceNo:(int)deviceNo;
 - (void) sendDeviceChange:(int)type withInfo:(DeviceInfos *)deviceInfo andDeviceNo:(int)argDeviceNo;
+
+-(void)restartCheck;
+-(void)dcDisconnect;
 
 @end

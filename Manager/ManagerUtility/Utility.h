@@ -7,6 +7,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#import <sys/utsname.h>
 
 #define DEFAULTS [NSUserDefaults standardUserDefaults]
 
@@ -18,6 +19,7 @@
 +(NSNumber*) getPidListeningOnPort:(NSNumber*)port;
 +(NSString*) pathToVBoxManageBinary;
 +(NSString*) managerDirectory;
++(NSString *)ManualDirectory;
 +(NSString*) pathToInstaller;
 +(NSString *)pathToLogger;
 +(NSString *)pathToWebDriverAgent;
@@ -31,12 +33,20 @@
 + (NSString *)getHangulDecomposition:(NSString *)hangul;
 
 + (NSString *)launchTask:(NSString *)launchPath arguments:(NSArray *)arguments;
+
++ (NSString *) launchTaskFromSh:(NSString *)commandString;
 + (NSString *) launchTaskFromBash:(NSString *)commandString;
 //특수문자 포함여부 확인
 + (BOOL)checkValidateString:(NSString* )string;
 
 + (NSString *)deviceVersion;
 + (void) restartManager;
++ (void)restartCheck;
+
+// CPU의 제품체크
++ (NSString *) cpuHardwareName;
+
+//+ (void)restartManager:(int)nIndex;
 
 #define LOG_APPIUM          0x01
 #define LOG_APPIUM_ERR      0x02

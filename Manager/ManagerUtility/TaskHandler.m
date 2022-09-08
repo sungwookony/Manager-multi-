@@ -75,6 +75,7 @@
     if( readFileHandler )
         [readFileHandler closeFile];
     
+    
     if( pipeNotiObserver ) {
         [[NSNotificationCenter defaultCenter] removeObserver:pipeNotiObserver];
         pipeNotiObserver = nil;

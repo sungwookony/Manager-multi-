@@ -31,13 +31,31 @@
 /// @brief deviceconsole 에서 출력되는 로그 정보를 파싱하기 위한 정규표현식
 #define LINE_REGEX "(\\w+\\s+\\d+\\s+\\d+:\\d+:\\d+)\\s+(\\S+|)\\s+(\\S+)\\[(\\d+)\\]\\s+\\<(\\w+)\\>:\\s(.*)"
 
+#define LINE_REGEX13 "(\\w+\\s+\\d+\\s+\\d+:\\d+:\\d+)\\s+(\\S+|)\\[(\\d+)\\]\\s+\\<(\\w+)\\>:\\s(.*)"
+
 /// @brief 사용하지 않음.
 #define CLOSE_LOG_TASK     (int64_t)((double)15.0 * NSEC_PER_SEC)
 
-@interface DeviceLog ()<PipeHandlerDelegate>
+@interface DeviceLog ()<PipeHandlerDelegate>{
+    // 220406 swccc 로그 재시작
+    NSString* date;
+    NSString* prevMinute;
+    
+    //search keyword
+
+}
 @property (nonatomic, strong) PipeHandler   * pipeHandler;
+@property (nonatomic, strong) dispatch_queue_t      logQueue;
 @property (nonatomic, strong) dispatch_queue_t      deviceLogQueue;
 @property (nonatomic, strong) dispatch_semaphore_t  deviceLogSem;
+
+@property (nonatomic, strong) NSTimer* timerChekLog;
+
+@property (nonatomic, strong) NSString* search;
+@property (nonatomic, strong) NSString* identifier;
+@property (nonatomic, strong) NSString* bundleID;
+@property (nonatomic, strong) NSString* searchAppName;
+
 @end
 
 
@@ -46,7 +64,8 @@
 @synthesize customDelegate,myDeviceInfos;;
 
 /// @brief  초기화
-- (id)initWithDeviceNo:(int)argDeviceNo UDID: (NSString* ) argUDID withDelegate:(id<DeviceLogDelegate>)delegate {
+//- (id)initWithDeviceNo:(int)argDeviceNo UDID: (NSString* ) argUDID withDelegate:(id<DeviceLogDelegate>)delegate {
+- (id)initWithDeviceNo:(int)argDeviceNo UDID: (NSString* ) argUDID deviceVersion:(NSString *)deviceVersion withDelegate:(id<DeviceLogDelegate>)delegate{
     if (self = [super init]) {
         customDelegate = delegate;
         _bLogStarted = NO;
@@ -55,6 +74,8 @@
         _logLevel = 0;
         _logIdentifier = @"*";
         _logSearch = @"";
+        
+        _osVersion = [deviceVersion intValue];
         
         _deviceLogQueue = dispatch_queue_create("DeviceLogQueue", NULL);
         _deviceLogSem = dispatch_semaphore_create(1);
@@ -70,24 +91,12 @@
 #pragma mark - <PipeHandler Delegate>
 /// @brief PipeHandler에서 발생하여 호출된 Delegate 메소드
 - (void) readData:(NSData *)readData withHandler:(id)handler {
-    if( handler == _pipeHandler ) {
+    
+//    if( handler == _pipeHandler && _bLogStarted == YES) {
+    if(self.bLogStarted){
+        
         NSString *outStr = [[NSString alloc] initWithData:readData encoding:NSUTF8StringEncoding];
 //        DDLogInfo(@"====== outStr===== %@", outStr);//manage
-//        
-//        if([ConnectionXCUITest sharedXCUIInterface].nLockSetting == 0) {
-//            NSRange range = [outStr rangeOfString:@"Setting foreground application to: com.apple.Preferences"];
-//            
-//            if(range.location != NSNotFound){
-//                NSLog(@"== device log == : %@",outStr);
-//                NSDictionary* requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:WDAPort], TIME_OUT:[NSNumber numberWithFloat:10.0f], CMD:@"/wda/homescreen"};
-//                NSDictionary * result = [Utility syncRequest:requestData];
-//                if( result ) {
-//                    NSLog(@"성공");
-//                } else {
-//                    NSLog(@"실패");
-//                }
-//            }
-//        }
         [self manageLog:outStr];
     }
 }
@@ -99,101 +108,378 @@
 - (void)startLogAtFirst {
     DDLogDebug(@"%s", __FUNCTION__);
     
-    NSString * theManagerDirectory = [Utility managerDirectory];
-    NSString * logCmdPath = [theManagerDirectory stringByAppendingPathComponent:@"deviceconsole"];
-
-    __block __typeof__(self) blockSelf = self;
-    if(self.logTask != nil)
-        self.logTask = nil;
-    self.logTask = [[NSTask alloc] init];
-    [self.logTask  setLaunchPath:logCmdPath];
-    [self.logTask  setArguments: [[NSArray alloc] initWithObjects:
-                                  @"-u",self.udid, nil]];
-    
-    _pipeHandler = [[PipeHandler alloc] initWithDelegate:self];
-    [_pipeHandler setReadHandlerForTask:_logTask withKind:PIPE_OUTPUT];
-    
-    //예외 일괄처리
-    //mg//[self.logTask launch];
-    //mg//s
-    if( [NSThread isMainThread] ) {
-        @autoreleasepool {
-            [self.logTask launch];
-        }
-    } else {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            DDLogDebug(@"start device log task");
+//    NSString * theManagerDirectory = [Utility managerDirectory];
+//    NSString * logCmdPath = [theManagerDirectory stringByAppendingPathComponent:@"deviceconsole"];
+//    NSLog(@"###### %@ #######",theManagerDirectory);
+      
+    if(self.logTask != nil){
+//        self.logTask = nil;
+    }else{
+        self.logTask = [[NSTask alloc] init];
+        
+        
+    //    [self.logTask  setLaunchPath:logCmdPath];
+    //    [self.logTask  setArguments: [[NSArray alloc] initWithObjects:
+    //                                  @"-u",self.udid, nil]];
+        
+//        NSString * commandString = [NSString stringWithFormat:@"idevicesyslog -u %@ -K", _udid];
+//        NSString * commandString = [NSString stringWithFormat:@"idevicesyslog -u %@ -K -q", _udid];
+        NSString * commandString = [NSString stringWithFormat:@"idevicesyslog -u %@", _udid];
+        self.logTask.launchPath = @"/bin/sh";
+        self.logTask.arguments = @[@"-l", @"-c", commandString];
+        
+        _pipeHandler = [[PipeHandler alloc] initWithDelegate:self];
+        [_pipeHandler setReadHandlerForTask:self.logTask withKind:PIPE_OUTPUT];
+        
+        //예외 일괄처리
+        //mg//[self.logTask launch];
+        //mg//s
+        NSError* error = nil;
+        if( [NSThread isMainThread] ) {
             @autoreleasepool {
-                [self.logTask launch];
+                if (@available(macOS 10.13, *)) {
+                    [self.logTask launchAndReturnError:&error];
+                } else {
+                    [self.logTask launch];
+                }
             }
-        });
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                DDLogDebug(@"start device log task");
+                @autoreleasepool {
+                    [self.logTask launch];
+                }
+            });
+        }
     }
-    //mg//e
-
-    /*
-    _pipeHandler = [[PipeHandler alloc] init];
-    _pipeHandler.pipe = [[NSPipe alloc] init];
-    [self.logTask  setStandardOutput:_pipeHandler.pipe];
-    [[_pipeHandler.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
-    
-    _pipeHandler.pipeNotiObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSFileHandleDataAvailableNotification
-                                                      object:[blockSelf.pipeHandler.pipe fileHandleForReading]
-                                                       queue:nil
-                                                  usingBlock:^(NSNotification *notification){
-                                                
-        [[blockSelf.pipeHandler.pipe fileHandleForReading] setReadabilityHandler:^(NSFileHandle * file) {
-            
-            blockSelf.pipeHandler.readFileHandler = file;
-            if( blockSelf.pipeHandler.readFileHandler ) {
-                NSData * output = [file availableData];
-                NSString *outStr = [[NSString alloc] initWithData:output encoding:NSUTF8StringEncoding];
-//                DDLogInfo(@"====== outStr===== %@", outStr);//manage
-               
-//                if([ConnectionXCUITest sharedXCUIInterface].nLockSetting == 0) {
-//                    NSRange range = [outStr rangeOfString:@"Setting foreground application to: com.apple.Preferences"];
-//
-//                    if(range.location != NSNotFound){
-//                        NSLog(@"== device log == : %@",outStr);
-//                        NSDictionary* requestData = @{METHOD:@"POST", PORT:[NSNumber numberWithInt:WDAPort], TIME_OUT:[NSNumber numberWithFloat:10.0f], CMD:@"/wda/homescreen"};
-//                        NSDictionary * result = [Utility syncRequest:requestData];
-//                        if( result ) {
-//                            NSLog(@"성공");
-//                        } else {
-//                            NSLog(@"실패");
-//                        }
-//                    }
-//                }
-
-                [blockSelf manageLog:outStr];
-                [[blockSelf.pipeHandler.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
-            }
-        }];
-    }];
-     
-    [self.logTask launch];
-     */
-    
-    //DDLogVerbose(@"====== logTask  launch==, %@=== ", self.udid );
+    [self.logTask suspend];
 }//startLogAtFirst
 
+// 210727 swccc 로그 재시작
+//-(void)checkLogOutput{
+//    if(self.logTask != nil){
+//        if(self.bLogStarted){
+//            if([self.logTask isRunning]){
+//                if(tempMsg != nil && tempProcess != nil){
+//                    if(checkMsg.length == 0 || checkProcess.length == 0){
+//                        @try {
+//                            checkMsg = [NSString stringWithFormat:@"%@",tempMsg];
+//                            checkProcess = [NSString stringWithFormat:@"%@",tempProcess];
+//                        } @catch (NSException *exception) {
+//                            DDLogInfo(@"CRASH 지점 1 %@", exception.description);
+//                        }
+//                        [self performSelector:@selector(checkLogOutput) withObject:nil afterDelay:5.0];
+//                        return;
+//                    }
+//
+//                    if([checkMsg isEqual:tempMsg] && [checkProcess isEqual:tempProcess]){
+//                        tempMsg = nil;
+//                        tempProcess = nil;
+//                        checkMsg = nil;
+//                        checkProcess = nil;
+//                        [self stopLog];
+//                        [self restartLog:keyword];
+//                        return;
+//                    }else{
+//                        DDLogInfo(@"CRASH 지점 2");
+//                        @try {
+//                            checkMsg = [NSString stringWithFormat:@"%@",tempMsg];
+//                            checkProcess = [NSString stringWithFormat:@"%@",tempProcess];
+//                        } @catch (NSException *exception) {
+//                            DDLogInfo(@"CRASH 지점 2 %@", exception.description);
+//                        }
+//
+//                    }
+//                }
+//            }else{
+//
+//            }
+//            [self performSelector:@selector(checkLogOutput) withObject:nil afterDelay:5.0];
+//        }
+//    }
+//}
+
+// 210727 swccc 로그 재시작
+-(void)restartLog:(NSString *)search{
+    dispatch_async(dispatch_get_main_queue(), ^{
+       
+        if(self.logTask != nil){
+            self.logTask = nil;
+        }
+        self.logTask = [[NSTask alloc] init];
+        NSString * commandString = [NSString stringWithFormat:@"idevicesyslog -u %@ -K -q", _udid];
+        if([search isEqualToString:@"*"]){
+            
+        }else{
+            if(search != nil){
+                if(search.length > 0){
+                    commandString = [NSString stringWithFormat:@"%@ | grep %@",commandString,search];
+                }
+            }
+        }
+        self.logTask.launchPath = @"/bin/sh";
+        self.logTask.arguments = @[@"-l", @"-c", commandString];
+        
+    //        NSPipe* pipe = [NSPipe pipe];
+        if(self.pipe != nil){
+            self.pipe = nil;
+        }
+        self.pipe = [NSPipe pipe];
+        [self.logTask setStandardOutput:self.pipe];
+        
+        if(self.bLogStarted == NO){
+            self.bLogStarted = YES;
+        }
+        // 210727 swccc 로그 재시작
+//        [self checkLogOutput];
+        [self.logTask launch];
+        
+        // BlockSelf 를 사용하면 setReadabilityHandler 안으로 들어가지 못함.. 왜 그런지는 확인해봐야 함..
+        [[self.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
+        self.pipeNotiObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSFileHandleDataAvailableNotification object:[self.pipe fileHandleForReading] queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+            
+            DDLogVerbose(@"addObserverForName");
+
+            [[self.pipe fileHandleForReading] setReadabilityHandler:^(NSFileHandle *file) {
+                NSData * output = [file availableData];
+                if( [self respondsToSelector:@selector(readData:withHandler:)] ) {
+                    if(output.length > 0){
+                        [self readData:output withHandler:self];
+                    }
+                }
+            }];
+        }];
+        __block typeof(self) weakSelf = self;
+        __block dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+        [self.logTask setTerminationHandler:^(NSTask *task) {
+            // do your stuff on completion
+            if(semaphore){
+                dispatch_semaphore_signal(semaphore);
+            }
+            
+            @try {
+                [weakSelf.logTask.standardOutput fileHandleForReading].readabilityHandler = nil;
+            } @catch (NSException *exception) {
+                NSLog(@"standardOutput except = %@",exception.description);
+            }
+            
+            [weakSelf killLog];
+//
+//            @try {
+//                [weakSelf.logTask.standardError fileHandleForReading].readabilityHandler = nil;
+//            } @catch (NSException *exception) {
+//                NSLog(@"standardOutput except = %@",exception.description);
+//            }
+        }];
+    });
+}
+
+-(void)checkLogStatus{
+    NSLog(@"%s",__FUNCTION__);
+    if(self.logTask){
+        NSLog(@"log not nil");
+        if([self.logTask isRunning]){
+            NSLog(@"log running (%@)",date);
+            if(date != nil && date.length > 0){
+                NSArray* arrayTemp;
+                @try {
+                    arrayTemp = [date componentsSeparatedByString:@":"];
+                } @catch (NSException *exception) {
+                    NSLog(@"%@",exception.description);
+                    arrayTemp = nil;
+                }
+                
+                if(arrayTemp != nil){
+                    if([arrayTemp count] == 3){
+                        
+//                        NSString* minute = [arrayTemp objectAtIndex:1]; //<--ㅎㅕㄴㅈㅐㅅㅣㄱㅏㄴㅇㅡㄹㅂㅣㄱㅛ
+                        
+                        time_t t;
+                        struct tm * timeinfo;
+                        time (&t);
+                        timeinfo = localtime (&t);
+                        NSString* minute;
+                        if(timeinfo->tm_min < 10){
+                            minute = [NSString stringWithFormat:@"0%d",timeinfo->tm_min];
+                        }else{
+                            minute = [NSString stringWithFormat:@"%d",timeinfo->tm_min];
+                        }
+                        
+                        
+                        NSLog(@"log = %@ and system = %@",[arrayTemp objectAtIndex:1],minute);
+                        prevMinute = [arrayTemp objectAtIndex:1];
+                        if(prevMinute == nil || prevMinute.length == 0){
+                            prevMinute = [arrayTemp objectAtIndex:1];
+                        }else{
+                            if(![minute isEqualToString:prevMinute]){
+                                NSLog(@"log restart %@ and %@ ",minute, prevMinute);
+                                [self stopCheckLogStatus];
+                                [self stopLog];
+                                sleep(1);
+                                prevMinute = [arrayTemp objectAtIndex:1];
+                                char theLogLevel ='V';
+                                [self startLog:self.search identifier:self.identifier level:theLogLevel bundleID:self.bundleID appName:self.appName];
+                                return;
+                            }
+//                            prevMinute = [arrayTemp objectAtIndex:1];
+                        }
+                    }
+                }
+            }
+        }else{
+            [self stopCheckLogStatus];
+            [self stopLog];
+            sleep(1);
+            char theLogLevel ='V';
+            [self startLog:self.search identifier:self.identifier level:theLogLevel bundleID:self.bundleID appName:self.appName];
+            return;
+
+        }
+    }
+}
+
+-(void)stopCheckLogStatus{
+    if(_timerChekLog){
+        [_timerChekLog invalidate];
+        _timerChekLog = nil;
+    }
+}
+
 /// @brief D.C에서 로그출력 시작 수신시.
-- (void)startLog:(NSString *)search identifier:(NSString* )identifier level: (char)level bundleID:(NSString *)bundleID appName:(NSString *)appName
+- (void)startLog:(NSString *)search identifier:(NSString* )identifier level: (char)level bundleID:(NSString *)bundleID appName:(NSString *)appName{
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+       
+        self.search = search;
+        self.identifier = identifier;
+        self.bundleID = bundleID;
+        self.appName = appName;
+        
+        if(_timerChekLog != nil){
+            _timerChekLog = nil;
+        }
+//        _timerChekLog = [NSTimer scheduledTimerWithTimeInterval:30.0 target:self selector:@selector(checkLogStatus) userInfo:nil repeats:YES];
+        
+        if(self.logTask != nil){
+            self.logTask = nil;
+        }
+        self.logTask = [[NSTask alloc] init];
+        NSLog(@"search = %@ and idtf = %@",search,identifier);
+        NSString * commandString = [NSString stringWithFormat:@"idevicesyslog -u %@ -K -q", _udid];
+        if([search isEqualToString:@"*"]){
+            
+        }else{
+            if(search != nil){
+                if(search.length > 0){
+                    commandString = [NSString stringWithFormat:@"%@ | grep %@",commandString,search];
+                }
+            }
+        }
+        NSString *cpu = [Utility cpuHardwareName];
+        if([cpu isEqualToString:@"x86_64"]){
+            self.logTask.launchPath = @"/bin/sh";
+            self.logTask.arguments = @[@"-l", @"-c", commandString];
+        }else{
+            self.logTask.launchPath = @"/opt/homebrew/bin/idevicesyslog";
+            self.logTask.arguments = @[@"-u",
+                                       _udid,
+                                       ];
+        }
+        
+        
+    //        NSPipe* pipe = [NSPipe pipe];
+        if(self.pipe != nil){
+            self.pipe = nil;
+        }
+        self.pipe = [NSPipe pipe];
+        [self.logTask setStandardOutput:self.pipe];
+        
+        if(self.bLogStarted == NO){
+            self.bLogStarted = YES;
+        }
+        // 210727 swccc 로그 재시작
+//        [self checkLogOutput];
+        [self.logTask launch];
+        
+        // BlockSelf 를 사용하면 setReadabilityHandler 안으로 들어가지 못함.. 왜 그런지는 확인해봐야 함..
+        [[self.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
+        self.pipeNotiObserver = [[NSNotificationCenter defaultCenter] addObserverForName:NSFileHandleDataAvailableNotification object:[self.pipe fileHandleForReading] queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+            
+            DDLogVerbose(@"addObserverForName");
+
+            [[self.pipe fileHandleForReading] setReadabilityHandler:^(NSFileHandle *file) {
+                NSData * output = [file availableData];
+
+                if( [self respondsToSelector:@selector(readData:withHandler:)] ) {
+                    if(output.length > 0){
+                        [self readData:output withHandler:self];
+//                        [[self.pipe fileHandleForReading] waitForDataInBackgroundAndNotify];
+                    }
+                }
+            }];
+        }];
+        __block typeof(self) weakSelf = self;
+        __block dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+        [self.logTask setTerminationHandler:^(NSTask *task) {
+            // do your stuff on completion
+            if(semaphore){
+                dispatch_semaphore_signal(semaphore);
+            }
+            
+            
+            @try {
+                [weakSelf.logTask.standardOutput fileHandleForReading].readabilityHandler = nil;
+            } @catch (NSException *exception) {
+                NSLog(@"standardOutput except = %@",exception.description);
+            }
+            
+            [weakSelf killLog];
+//
+//            @try {
+//                [weakSelf.logTask.standardError fileHandleForReading].readabilityHandler = nil;
+//            } @catch (NSException *exception) {
+//                NSLog(@"standardOutput except = %@",exception.description);
+//            }
+        }];
+    });
+}
+
+
+
+- (void)startLog2:(NSString *)search identifier:(NSString* )identifier level: (char)level bundleID:(NSString *)bundleID appName:(NSString *)appName
 {
     DDLogDebug(@"%s",__FUNCTION__);
     DDLogVerbose(@"bundle ID = %@ & name = %@",bundleID,appName);
-    
-    if([self.logTask isRunning] == NO){
-        //mg//s
-        if( [NSThread isMainThread] ) {
-            [self.logTask launch];
-        } else {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.logTask launch];
-            });
+//    BOOL bLogStart = [self.logTask resume];
+//    if([self.logTask isRunning] == NO){
+//        //mg//s
+//        if( [NSThread isMainThread] ) {
+//            [self.logTask launch];
+//        } else {
+//            dispatch_async(dispatch_get_main_queue(), ^{
+//                [self.logTask launch];
+//            });
+//        }
+//        //mg//e
+//
+//        //mg//[self.logTask launch];
+//    }
+    @try{
+        
+        BOOL bLogStart = [self.logTask resume];
+        if(self.bLogStarted == NO){
+            self.bLogStarted = YES;
         }
-        //mg//e
+        if(_pipeHandler != nil){
+            _pipeHandler = nil;
+            _pipeHandler = [[PipeHandler alloc] initWithDelegate:self];
+            [_pipeHandler setReadHandlerForTask:self.logTask withKind:PIPE_OUTPUT];
 
-        //mg//[self.logTask launch];
+        }
+
+        NSLog(@"b = %d",bLogStart);
+    }@catch(NSException* ex){
+        
     }
     
     [self setLogFilterSearch:search identifier:identifier level:level];
@@ -230,10 +516,91 @@
 }
 
 /// @brief D.C에서 로그출력 종료 수신시.
-- (void)stopLog
+- (void)stopLog2
 {
     self.bLogStarted = NO;
     [self setLogFilterSearch:@"*" identifier:@"" level:'V'];
+    if([self.logTask isRunning]){
+//        [self.logTask suspend];
+    }
+}
+
+-(void)stopLog{
+//    dispatch_async(dispatch_get_main_queue(), ^{
+    //test
+    [self stopCheckLogStatus];
+    
+    
+    self.bLogStarted = NO;
+    [self setLogFilterSearch:@"*" identifier:@"" level:'V'];
+//[self killLogProcess];
+    if(self.pipe != nil){
+        [[self.pipe fileHandleForReading] closeFile];
+
+        sleep(2);
+        
+        @try {
+           
+            [[NSNotificationCenter defaultCenter] removeObserver:self.pipeNotiObserver];
+            [[NSNotificationCenter defaultCenter] removeObserver:NSFileHandleDataAvailableNotification name:nil object:[self.pipe fileHandleForReading]];
+            [[NSNotificationCenter defaultCenter] removeObserver:NSFileHandleDataAvailableNotification];
+        } @catch (NSException *exception) {
+            NSLog(@"=== %@ ###",exception.description);
+        }
+        
+        self.pipeNotiObserver = nil;
+        self.pipe = nil;
+        if(self.logTask != nil){
+//            [self.logTask suspend];
+
+            for(int i = 0; i< 30; i++){
+                [self.logTask terminate];
+            }
+        }
+        [self killLog];
+//        [self.logTask terminate];
+    }
+}
+
+-(void)killLog{
+    NSString * output = [Utility launchTaskFromSh:[NSString stringWithFormat:@"ps -ef | grep %@", _udid]];
+
+    NSLog(@"KILL SWCCC %s -> output (%@)",__FUNCTION__,output);
+    output = [output stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+    NSArray* arrOut = [output componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+
+    NSMutableArray * arrPid = [NSMutableArray array];
+    for( NSString * outputProcessInfos in arrOut ) {
+       if( 0 == outputProcessInfos.length )
+           continue;
+
+       if( [outputProcessInfos containsString:@"grep "] ) {
+           continue;
+       }
+
+       NSArray * component = [outputProcessInfos componentsSeparatedByString:@" "];
+       NSMutableArray* tempArray = [NSMutableArray array];
+       for(NSString* temp in component){
+           if(temp.length > 0){
+               [tempArray addObject:temp];
+           }else{
+           }
+       }
+       if((int)tempArray.count > 3){
+           NSString* strPid = [tempArray objectAtIndex:2];
+           NSLog(@"strPid = %@",strPid);
+           if([strPid isEqualToString:@"1"]){
+               strPid = [tempArray objectAtIndex:1];
+           }
+           if([[tempArray objectAtIndex:7] isEqualToString:@"idevicesyslog"] ){
+               strPid = [tempArray objectAtIndex:1];
+               NSString * command = [NSString stringWithFormat:@"kill -9 %@", strPid];
+               int result = system([command cStringUsingEncoding:NSUTF8StringEncoding]);
+
+               NSLog(@"Kill Device LOG - (%d) ",result);
+           }
+       }
+    }
 }
 
 /// @brief Agent (Appium, WebDriverAgent) 종료 시에 로그 출력 종료.
@@ -241,38 +608,37 @@
 {
     self.bLogStarted = NO;
     if([self.logTask isRunning]) {
-        
+
         __block __typeof__(self) blockSelf = self;
         __block dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-        
+
         [self.logTask setTerminationHandler:^(NSTask * task) {
             if( semaphore ) {
                 dispatch_semaphore_signal(semaphore);
             }
         }];
-        
+
         [self.logTask terminate];
-        
+
 //        dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, CLOSE_LOG_TASK));
         dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f * NSEC_PER_SEC)));
         semaphore = nil;
-        
+
         if( _pipeHandler ) {
             [_pipeHandler closeHandler];
             _pipeHandler = nil;
         }
-        
+
         _logTask = nil;
     }
+    [self.logTask terminate];
 }
 
 /// @brief DeviceConsole 타스크에서 출력된 로그 정보를 파싱함
 /// @brief launchedAppInfos Delegate 메소드가 호출 되는데 이 메소드에 수정사항이 있는데.. 아주 중요함 !!!!!
 - (void)manageLog : (NSString* )log
 {
- 
     __block __typeof__(self) blockSelf = self;
-    
     dispatch_async(_deviceLogQueue, ^{
     
         dispatch_semaphore_wait(_deviceLogSem, DISPATCH_TIME_FOREVER);
@@ -283,8 +649,9 @@
 
         NSArray * logComponents = [replaceLog componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
        
-        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@LINE_REGEX options:NSRegularExpressionCaseInsensitive error:&error];
-        
+        NSRegularExpression *regex = nil;
+        regex = [NSRegularExpression regularExpressionWithPattern:@LINE_REGEX13 options:NSRegularExpressionCaseInsensitive error:&error];
+
         for( NSString * oneLineLog in logComponents ) {
             
             if( 0 == oneLineLog.length )
@@ -292,7 +659,8 @@
             
             NSArray *matches = [regex matchesInString:oneLineLog options:0 range:NSMakeRange(0, [oneLineLog length])];
             
-            NSString * date = @"", *device = @"", *process = @"", *pid = @"", *type = @"", *msg = @"";
+//            NSString * date = @"", *device = @"", *process = @"", *pid = @"", *type = @"", *msg = @"";
+            NSString  *device = @"", *process = @"", *pid = @"", *type = @"", *msg = @"";
             
             if ([matches count] <= 0){
                 type = @"Error";
@@ -315,29 +683,100 @@
 //                    [blockSelf sendLogDataByDate:@"" device:@"" process:@"" pid:@"" type:@"" text:oneLineLog];
 //                    continue;
 //                }
-                
-                NSRange dateRange    =  [match rangeAtIndex:1];
-                NSRange deviceRange  =  [match rangeAtIndex:2];
-                NSRange processRange =  [match rangeAtIndex:3];
-                NSRange pidRange     =  [match rangeAtIndex:4];
-                NSRange typeRange    =  [match rangeAtIndex:5];
-                NSRange logRange     =  [match rangeAtIndex:6];
+                NSRange dateRange,deviceRange,processRange,pidRange,typeRange,logRange;
+                dateRange    =  [match rangeAtIndex:1];
+                processRange =  [match rangeAtIndex:2];
+                pidRange     =  [match rangeAtIndex:3];
+                typeRange    =  [match rangeAtIndex:4];
+                logRange     =  [match rangeAtIndex:5];
                 
                 date       =  [oneLineLog substringWithRange:dateRange];
-                device     =  [oneLineLog substringWithRange:deviceRange];
                 process    =  [oneLineLog substringWithRange:processRange];
                 pid        =  [oneLineLog substringWithRange:pidRange];
                 type       =  [oneLineLog substringWithRange:typeRange];
                 msg        =  [oneLineLog substringWithRange:NSMakeRange(logRange.location, [oneLineLog length] - logRange.location)];
                 
+//                NSRange dateRange    =  [match rangeAtIndex:1];
+//                NSRange deviceRange  =  [match rangeAtIndex:2];
+//                NSRange processRange =  [match rangeAtIndex:3];
+//                NSRange pidRange     =  [match rangeAtIndex:4];
+//                NSRange typeRange    =  [match rangeAtIndex:5];
+//                NSRange logRange     =  [match rangeAtIndex:6];
+                
+//                date       =  [oneLineLog substringWithRange:dateRange];
+//                device     =  [oneLineLog substringWithRange:deviceRange];
+//                process    =  [oneLineLog substringWithRange:processRange];
+//                pid        =  [oneLineLog substringWithRange:pidRange];
+//                type       =  [oneLineLog substringWithRange:typeRange];
+//                msg        =  [oneLineLog substringWithRange:NSMakeRange(logRange.location, [oneLineLog length] - logRange.location)];
+                
+                
+//                NSRange range = [msg rangeOfString:@"Uncaptured runtime issue reported"];
+//
+//                if(range.location != NSNotFound){
+//                    NSLog(@"SSI BAL CRASH LOG");
+//                    // command log restart after 10 seconds
+//                    continue;
+//                }
+                
                 if( [msg hasPrefix:@"<private>"] ) {            // <private> 로 시작하는 로그는 로그 메시지가 없어서 걸러줌.
                     continue;
                 }
                 
-                 if([match numberOfRanges] == 7 && self.bLogStarted == YES){
+                if([process hasPrefix:@"testmanagerd"] || [process hasPrefix:@"com.apple.WebKit.Networking"]){
+                    continue;
+                }
+                
+                if([process hasPrefix:@"rtcreportingd"]){
+                    continue;
+                }
+                
+                if([process hasPrefix:@"DTServiceHub(DVTInstrumentsFoundation)"]){
+                    continue;
+                }
+                
+                if([process hasPrefix:@"WebDriverAgentRunner-Runner(WebDriverAgentLib)"] || [process hasPrefix:@"locationd"]){
+                    continue;
+                }
+                
+                if([process hasPrefix:@"SuperPlatform(XCTAutomationSupport)"] || [process hasPrefix:@"duetexpertd(libxpc.dylib)"] || [process hasPrefix:@"dasd(DuetActivitySchedulerDaemon)"]){
+                    continue;
+                }
+                
+                if([process hasPrefix:@"ClientResourceMornitor"] || [process hasPrefix:@"backboardd(CoreBrightness)"]){
+                    continue;
+                }
+            
+                if([process hasPrefix:@"SuperPlatform"] || [process hasPrefix:@"XCTAutomationSupport"] || [process hasPrefix:@"SpringBoard(XCTAutomationSupport)"] || [process hasPrefix:@"CommCenter"]){
+                    continue;
+                }
+                
+                if([process hasPrefix:@"nfcd(libnfshared.dylib)"] || [process hasPrefix:@"bluetoothd"] || [process hasPrefix:@"locationd"] || [process hasPrefix:@"mDNSResponder"] || [process hasPrefix:@"dasd(DuetActivitySchedulerDaemon)"]){
+                    continue;
+                }
+//                Uncaptured runtime issue reported
+
+                
+                 if([match numberOfRanges] > 5 && self.bLogStarted == YES){
                      // 로그 정보를 DC 로 전송한다.
-//                     NSLog(@"type = %@",type);
-                     [blockSelf sendLogDataByDate:date device:device process:process pid:pid type:type text:msg];
+//                     NSLog(@"type = %@, msg = %@",type,msg);
+//                     NSLog(@"search = %@",self.logSearch);
+                     if([self.logSearch isEqualToString:@"*"] ||
+                        self.logSearch.length < 1){
+                         [blockSelf sendLogDataByDate:date device:device process:process pid:pid type:type text:msg];
+                     }else{
+                         if([process containsString:self.logSearch] == YES || [msg containsString:self.logSearch] == YES)
+                             [blockSelf sendLogDataByDate:date device:device process:process pid:pid type:type text:msg];
+//                         if([process containsString:@"testmanagerd"] == NO){
+//                             if([process containsString:@"WebDriverAgent"] == NO && [process containsString:self.logSearch] && [msg containsString:self.logSearch]){
+//
+//                             }
+//                         }
+                     }
+                     // 210727 swccc 로그 재시작
+//                     tempMsg = [NSString stringWithFormat:@"%@",msg];
+//                     tempProcess = [NSString stringWithFormat:@"%@",process];
+                         
                      continue;
                  }
             }
@@ -345,20 +784,7 @@
             if( 0 == pid.intValue ) {
                 continue;
             }
-            
-            
-            // 로그가 너무 많이 발생하여 UI 에 출력을 하다보니 여러가지 문제가 발생하여 제거함..
-//            [blockSelf sendLogDataByDate:date device:device process:process pid:pid type:type text:msg];
-            
-//            NSDictionary* dict = [[NSDictionary alloc] initWithObjectsAndKeys:date,@"DATE"
-//                                  ,process,@"PROCESS"
-//                                  ,type,@"TAG"
-//                                  ,msg,@"LOG"
-//                                  ,nil];
-            
-            // code here  // Device Log 는 출력하지 않는다..
-//            [[NSNotificationCenter defaultCenter] postNotificationName:DEVICE_LOG object:self userInfo:dict];
-            
+
             NSArray * arrMsg = [msg componentsSeparatedByString:@" "];
             if( arrMsg.count < 3 )
                 continue;
@@ -392,14 +818,35 @@
         return;
     }
     
-    if (([self.logSearch length] == 1) && [self.logSearch isEqualToString:@"*"]) {
+    if ((([self.logSearch length] == 1) && [self.logSearch isEqualToString:@"*"])
+        || [self.logSearch length] == 0) {
         //
     } else {
         if( self.logSearch ) {
-            NSRange the_range = [text rangeOfString:self.logSearch options:NSCaseInsensitiveSearch];
-            if (the_range.location == NSNotFound) {
-                return;
+//            DDLogInfo(@"==log(%d) %@, %@, %@, %@, %@, %@ , (%@)==", self.deviceNo, date, device, process, pid, type, text , self.logSearch);
+            if([text containsString:@"####"]){
+                NSLog(@"zzzz");
             }
+            //프로세스명과 메시지명을 둘다 검색하여 없을경우 리턴시켜준다.
+            @try {
+                NSRange the_range = [text rangeOfString:self.logSearch options:NSCaseInsensitiveSearch];
+                if (the_range.location == NSNotFound) {
+                    if(process != nil && process.length > 0){
+                        @try {
+                            the_range = [process rangeOfString:self.logSearch options:NSCaseInsensitiveSearch];
+                        } @catch (NSException *exception) {
+                            NSLog(@"%@",exception.description);
+                        }
+                        
+                        if (the_range.location == NSNotFound) {
+                            return;
+                        }
+                    }
+                }
+            } @catch (NSException *exception) {
+                NSLog(@"%@",exception.description);
+            }
+           
         }
     }
     
@@ -423,40 +870,6 @@
         logLevel = 'V';
     }
     
-//    if(theLogLevel < self.logLevel) {
-//        return;
-//    }
-    
-    
-    
-    
-// ========= 동일한 레벨의 로그만 출력.
-//    
-//    char theLogLevel;
-//    if ([type isEqualToString:@"Error"]) {
-//        theLogLevel = 'E';
-//    } else if ([type isEqualToString:@"Notice"]) {
-//        theLogLevel = 'N';
-//    } else if ([type isEqualToString:@"Warning"]) {
-//        theLogLevel = 'W';
-//    } else if ([type isEqualToString:@"Debug"]) {
-//        theLogLevel = 'D';
-//    } else {
-//        theLogLevel = 'V';
-//    }
-//    
-//    BOOL doSkip = YES;
-//    if (self.logLevel == 'V') {
-//        doSkip = NO;
-//    } else if (self.logLevel == theLogLevel ) {
-//        doSkip = NO;
-//    }
-//    
-//    if (doSkip) {
-//        return;
-//    }
-//    
-    
     NSString *cut_date = [self stringCutForSize:date size:18];
     NSString *cut_pid = [self stringCutForSize:pid size:5];
     NSString *cut_tid = [self stringCutForSize:@" " size:5];
@@ -474,8 +887,9 @@
         }
         CommunicatorWithDC *theCommDC = [CommunicatorWithDC sharedDCInterface];
 
-        if([self.logIdentifier isEqualToString:@"*"]){
-            //로그 출력이 패키지가 ALL 일 경우
+        if([self.logIdentifier isEqualToString:@"*"] || (self.logIdentifier.length == 0)){
+            //로그 출력이 패키지가 ALL 일 경우 (현재 앱선택 부분이 없으므로 해당 루트를 무조건 탐)
+            
             [theCommDC sendLogData:logPacket deviceNo:self.deviceNo];
         } else if([cut_tag hasPrefix:self.logIdentifier] || [self.logIdentifier isEqualToString:@"Safari"]){
             DDLogWarn(@"앱선택하여 로그 출력1 tag = %@ , name = %@",cut_tag,self.appName);
@@ -485,6 +899,7 @@
             DDLogError(@"%@ and %@",self.logIdentifier,self.bundleId);
         }
     }else{
+        return;
         
     }
 //    CommunicatorWithDC *theCommDC = [CommunicatorWithDC sharedDCInterface];

@@ -11,6 +11,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <assert.h>
+
 #define READ 0
 #define WRITE 1
 
@@ -322,11 +327,21 @@ popen3(const char *command, int *infp, int *outfp)
 	return theManagerDirectory;
 }
 
++ (NSString *)ManualDirectory {
+    struct passwd *pw = getpwuid(getuid());
+    assert(pw);
+    NSString *theManagerDirectory = [NSString stringWithFormat:@"%@/OnycomManager/Manual/", [NSString stringWithUTF8String:pw->pw_dir]];
+    return theManagerDirectory;
+}
+
 /// @brief  ios-deploy 는 ideviceinstaller 처럼 mac 에서 idevice 에 앱을 설치, 삭제, 정보획득 등의 작업을 할 수 있는 툴임.
 + (NSString *)pathToInstaller {
 //    NSString * installerPath = @"/usr/local/bin/ideviceinstaller";
     //NSString *installerPath = [NSString stringWithFormat:@"%@/node_modules/appium/build/libimobiledevice-macosx/ideviceinstaller", [Utility managerDirectory]];
     NSString* installerPath = @"/usr/local/bin/ios-deploy";
+    if(![[self cpuHardwareName] isEqualToString:@"x86_64"]){
+        installerPath = @"/opt/homebrew/bin/ios-deploy";
+    }
     return installerPath;
 }
 
@@ -336,6 +351,9 @@ popen3(const char *command, int *infp, int *outfp)
     //NSString *loggerPath = [NSString stringWithFormat:@"%s/OnycomManager/deviceconsole", theHomeDir];
 
     NSString * loggerPath = @"/usr/local/bin/idevicesyslog";
+    if(![[self cpuHardwareName] isEqualToString:@"x86_64"]){
+        loggerPath = @"/opt/homebrew/bin/ios-deploy";
+    }
     return loggerPath;
 }
 
@@ -356,8 +374,10 @@ popen3(const char *command, int *infp, int *outfp)
     {
         NSNumber *procPid;
         int nMax = 8;
-        while( nMax-- > 0 && (procPid = [Utility getPidListeningOnPort:[NSNumber numberWithInt:port]]) != nil)
+//        while( nMax-- > 0 && (procPid = [Utility getPidListeningOnPort:[NSNumber numberWithInt:port]]) != nil)
+        while( nMax-- > 0 )
         {
+            procPid = [Utility getPidListeningOnPort:[NSNumber numberWithInt:port]];
             if (procPid != nil && exceptPid != [procPid intValue])
             {
                 NSLog(@"########################################################################");
@@ -657,57 +677,141 @@ popen3(const char *command, int *infp, int *outfp)
     return output;
 }
 
+
++ (NSString *) launchTaskFromSh:(NSString *)commandString{
+    NSTask *task = [NSTask new];
+
+    task.launchPath = @"/bin/sh";
+//    task.arguments = @[@"-c", @"ps -ax | grep /usr/bin/xcodebuild"];
+    task.arguments = @[@"-c", commandString];
+
+    NSPipe *pipe = [NSPipe pipe];
+    task.standardOutput = pipe;
+
+    NSFileHandle *file = [pipe fileHandleForReading];
+
+    [task launch];
+
+    NSData *data = [file readDataToEndOfFile];
+    NSString *output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
+    
+    return output;
+}
+
+
+//+ (NSString *) launchTaskFromSh:(NSString *)commandString{
+//    NSPipe* outPipe = [NSPipe pipe];
+//    NSPipe* errPipe = [NSPipe pipe];
+//
+//    __block dispatch_semaphore_t resourceMornitorSem = dispatch_semaphore_create(0);
+//    NSString* path = @"/bin/sh";
+//
+//    NSUserUnixTask* unixTask = [[NSUserUnixTask alloc] initWithURL:[NSURL fileURLWithPath:path] error:nil];
+//    NSArray* argArray  = [NSArray arrayWithObjects:
+//                           @"-l", @"-c",
+//                           commandString,
+//                           nil];
+//
+//
+//    [unixTask setStandardOutput:[outPipe fileHandleForWriting]];
+//    [unixTask setStandardError:[errPipe fileHandleForWriting]];
+//    __block NSString * output = nil;
+//    [unixTask executeWithArguments:argArray completionHandler:^(NSError *error) {
+//        output = [[NSString alloc] initWithData: [[outPipe fileHandleForReading] readDataToEndOfFile] encoding: NSUTF8StringEncoding];
+//        NSLog(@"stdout: %@", output);
+//
+//       NSString *error1 = [[NSString alloc] initWithData: [[errPipe fileHandleForReading] readDataToEndOfFile] encoding: NSUTF8StringEncoding];
+//       NSLog(@"stderr: %@", error1);
+//        dispatch_semaphore_signal(resourceMornitorSem);
+//    }];
+//    dispatch_semaphore_wait(resourceMornitorSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f *NSEC_PER_SEC)));
+//    return output;
+//}
+
 /// @brief 타스크를 실행하여 Output 문자열리스트를 얻어서 리턴함.. 위의 방법보단 더 좋은 방식임..
 + (NSString *) launchTaskFromBash:(NSString *)commandString {
+//    NSLog(@"command = %@",commandString);
+//    @autoreleasepool {
+//        NSTask * testTask = [[NSTask alloc] init];
+//        testTask.launchPath = @"/bin/bash";
+//
+//        testTask.arguments  = [NSArray arrayWithObjects:
+//                               @"-l", @"-c",
+//                               commandString,
+//                               nil];
+//
+//
+//        NSPipe *pipe = [NSPipe pipe];
+//        [testTask setStandardOutput: pipe];
+//        NSFileHandle *file = [pipe fileHandleForReading];
+//
+//        __block BOOL bLaunch = YES;
+//        __block NSError * error = nil;
+//        if( [NSThread isMainThread] ) {
+//
+//            if (@available(macOS 10.13, *)) {
+//                bLaunch = [testTask launchAndReturnError:&error];
+//            } else {
+//                [testTask launch];
+//            }
+//
+//        } else {
+//            dispatch_sync(dispatch_get_main_queue(), ^(void){
+//                if (@available(macOS 10.13, *)) {
+//                    bLaunch = [testTask launchAndReturnError:&error];
+//                } else {
+//                    [testTask launch];
+//                }
+//            });
+//        }
+//        if(error == nil){
+//            if(bLaunch){
+//                NSData *data = [file readDataToEndOfFile];
+//                NSString *output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
+//                [file closeFile];
+//
+//                return output;
+//            }else{
+//                [file closeFile];
+//                return nil;
+//            }
+//        }else{
+//            NSLog(@"%s error = %@",__FUNCTION__,error.description);
+//
+//            [file closeFile];
+//            [Utility restartCheck];
+//            return nil;
+//        }
+//    }
     
-    NSTask * testTask = [[NSTask alloc] init];
-    testTask.launchPath = @"/bin/bash";
+    NSPipe* outPipe = [NSPipe pipe];
+    NSPipe* errPipe = [NSPipe pipe];
 
-    testTask.arguments  = [NSArray arrayWithObjects:
+//    NSTask * testTask = [[NSTask alloc] init];
+//    testTask.launchPath = @"/bin/bash";
+    __block dispatch_semaphore_t resourceMornitorSem = dispatch_semaphore_create(0);
+    NSString* path = @"/bin/bash";
+    
+    NSUserUnixTask* unixTask = [[NSUserUnixTask alloc] initWithURL:[NSURL fileURLWithPath:path] error:nil];
+    NSArray* argArray  = [NSArray arrayWithObjects:
                            @"-l", @"-c",
                            commandString,
                            nil];
     
     
-    NSPipe *pipe= [NSPipe pipe];
-    [testTask setStandardOutput: pipe];
-    NSFileHandle *file = [pipe fileHandleForReading];
-    
-    __block BOOL bLaunch = YES;
-    __block NSError * error = nil;
-    if( [NSThread isMainThread] ) {
+    [unixTask setStandardOutput:[outPipe fileHandleForWriting]];
+    [unixTask setStandardError:[errPipe fileHandleForWriting]];
+    __block NSString * output = nil;
+    [unixTask executeWithArguments:argArray completionHandler:^(NSError *error) {
+        output = [[NSString alloc] initWithData: [[outPipe fileHandleForReading] readDataToEndOfFile] encoding: NSUTF8StringEncoding];
+        NSLog(@"stdout: %@", output);
 
-        if (@available(macOS 10.13, *)) {
-            bLaunch = [testTask launchAndReturnError:&error];
-        } else {
-            [testTask launch];
-        }
-        
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), ^(void){
-            if (@available(macOS 10.13, *)) {
-                bLaunch = [testTask launchAndReturnError:&error];
-            } else {
-                [testTask launch];
-            }
-        });
-    }
-    if(error == nil){
-        if(bLaunch){
-            NSData *data = [file readDataToEndOfFile];
-            NSString *output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
-            [file closeFile];
-
-            return output;
-        }else{
-            [file closeFile];
-            return nil;
-        }
-    }else{
-        NSLog(@"%s error = %@",__FUNCTION__,error.description);
-        [file closeFile];
-        return nil;
-    }
+       NSString *error1 = [[NSString alloc] initWithData: [[errPipe fileHandleForReading] readDataToEndOfFile] encoding: NSUTF8StringEncoding];
+       NSLog(@"stderr: %@", error1);
+        dispatch_semaphore_signal(resourceMornitorSem);
+    }];
+    dispatch_semaphore_wait(resourceMornitorSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0f *NSEC_PER_SEC)));
+    return output;
 }
 
 // YES : 특수문자를 포함하고있음
@@ -734,24 +838,56 @@ popen3(const char *command, int *infp, int *outfp)
 }
 
 
-+ (void) restartManager {
-    DDLogError(@"1%s", __FUNCTION__);
+//+ (void) restartManager {
+//    DDLogError(@"1%s", __FUNCTION__);
+//    
+//    NSString* mgr = nil;
+//    
+//    NSArray* array = [[[NSBundle mainBundle] bundlePath] componentsSeparatedByString:@"/"];
+//    int nTotalCount = (int)[array count];
+//    NSString* appName = [array objectAtIndex:nTotalCount-1];
+//    DDLogInfo(@"AppName = %@",appName);
+//    if([appName isEqualToString:@"Manager.app"]){
+//        mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
+//    }else{
+//        mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
+//    }
+//    
+//    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
+////    exit(0);
+//    DDLogError(@"%s", __FUNCTION__);
+//}
+
+//+ (void)restartManager:(int)nIndex{
++ (void)restartManager{
+    NSString* path = [[NSBundle mainBundle] executablePath];
+    NSTask* restartTask = [[NSTask alloc] init];
+    restartTask.launchPath = path;
+    [restartTask launch];
     
-    NSString* mgr = nil;
+    [[NSApplication sharedApplication] terminate:nil];
     
-    NSArray* array = [[[NSBundle mainBundle] bundlePath] componentsSeparatedByString:@"/"];
-    int nTotalCount = (int)[array count];
-    NSString* appName = [array objectAtIndex:nTotalCount-1];
-    DDLogInfo(@"AppName = %@",appName);
-    if([appName isEqualToString:@"Manager.app"]){
-        mgr = [NSString stringWithFormat:@"%@Manager2.app", [Utility managerDirectory]];
-    }else{
-        mgr = [NSString stringWithFormat:@"%@Manager.app", [Utility managerDirectory]];
+}
+
++(void)restartCheck{
+    BOOL bRestart = [[NSUserDefaults standardUserDefaults] boolForKey:MANAGERRESTART];
+    if(bRestart){
+        [self restartManager];
+        [self performSelectorInBackground:@selector(exitManager) withObject:nil];
+        exit(0);
     }
+}
+
+-(void)exitManager{
+    exit(0);
+}
+
++ (NSString *) cpuHardwareName{
+    struct utsname sysinfo;
+    int retVal = uname(&sysinfo);
+    if(EXIT_SUCCESS != retVal) return nil;
     
-    [[NSWorkspace sharedWorkspace] launchApplication:mgr];
-//    exit(0);
-    DDLogError(@"%s", __FUNCTION__);
+    return [NSString stringWithUTF8String:sysinfo.machine];
 }
 
 @end
